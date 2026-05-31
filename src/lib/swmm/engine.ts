@@ -226,20 +226,24 @@ function runStub(built: BuildResult, inp: string): EngineResult {
   };
   for (const n of tree.nodes) countUp(n);
 
-  // 6 hours, 5-minute steps = 73 points; ramp + peak + recede
-  const N = 73;
+  // Use a reporting step of 5 min; derive period count from endTimeSec when present.
+  const endSec = 21600;
+  const stepSec = 300;
+  const N = Math.max(2, Math.floor(endSec / stepSec) + 1);
+  const peakMin = endSec / 60 / 3; // peak ~1/3 into sim
   const times: number[] = [];
   const wave: number[] = [];
   for (let i = 0; i < N; i++) {
-    const m = i * 5;
+    const m = i * (stepSec / 60);
     times.push(m);
-    const x = (m - 120) / 60; // peak ~2h
+    const x = (m - peakMin) / Math.max(30, peakMin / 2);
     wave.push(Math.exp(-x * x * 0.6));
   }
 
-  const baseflow = Math.max(0, Number(built.inp ? 0.1 : 0.1)); // use opts default-ish
+  const baseflow = 0.1;
   const series: NodeSeries[] = [];
   const totalUp = upstream.get(1) ?? 1;
+  const inflowByNode = new Map<number, number[]>();
   for (const n of tree.nodes) {
     const up = upstream.get(n) ?? 1;
     const peakQ = baseflow * up;
@@ -249,6 +253,16 @@ function runStub(built: BuildResult, inp: string): EngineResult {
       +Math.min(cap, Math.log10(1 + q) * 1.5).toFixed(4),
     );
     series.push({ node: n, depth, inflow });
+    inflowByNode.set(n, inflow);
+  }
+
+  // synthesize link flows: flow in conduit ≈ from-node inflow
+  const links: LinkSeries[] = [];
+  let cid = 0;
+  for (const [from, to] of tree.edges) {
+    cid++;
+    const flow = inflowByNode.get(from) ?? wave.map(() => 0);
+    links.push({ id: "C" + cid, from, to, flow: flow.slice() });
   }
 
   const peakDepthByNode = series
