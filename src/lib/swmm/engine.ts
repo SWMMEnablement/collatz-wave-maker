@@ -310,6 +310,7 @@ function runStub(built: BuildResult, inp: string): EngineResult {
     out: null,
     times,
     series,
+    links,
     engine: "stub",
     log: `stub run completed in ${(performance.now() - t0).toFixed(1)}ms`,
     durationMs: performance.now() - t0,
