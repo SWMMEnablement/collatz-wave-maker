@@ -157,7 +157,7 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
           });
         }
         // map link id "C{cid}" back to from/to using built.tree.edges order
-        const edges = built.tree.edges;
+        const edges = Array.from(built.tree.edges.entries());
         for (let i = 0; i < parsed.linkIds.length; i++) {
           const id = parsed.linkIds[i];
           const m = /^C(\d+)$/.exec(id);
