@@ -1,9 +1,9 @@
 // SWMM5 engine runner.
-// Tries to load a real Emscripten-compiled swmm5 from /wasm/swmm5.js + /wasm/swmm5.wasm.
-// Falls back to a stub engine that produces a synthetic RPT + time series so the
-// full UI (run / inp / rpt / graphics) works before the real wasm is dropped in.
+// Loads the real Emscripten-compiled swmm5 from /wasm/swmm5.js + /wasm/swmm5.wasm.
+// Falls back to a synthetic stub only if the wasm fails to load.
 
 import type { BuildResult } from "./inp";
+import { parseSwmmOut } from "./outfile";
 
 export interface NodeSeries {
   node: number;
