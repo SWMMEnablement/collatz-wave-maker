@@ -74,11 +74,17 @@ function Page() {
             <Tabs defaultValue="visual">
               <TabsList>
                 <TabsTrigger value="visual">Visual</TabsTrigger>
+                <TabsTrigger value="hgl">HGL</TabsTrigger>
                 <TabsTrigger value="inp">INP text</TabsTrigger>
               </TabsList>
               <TabsContent value="visual" className="mt-3">
                 <div className="h-[75vh] min-h-[520px]">
                   <HolyTreeCanvas tree={built.tree} coords={built.coords} />
+                </div>
+              </TabsContent>
+              <TabsContent value="hgl" className="mt-3">
+                <div className="h-[75vh] min-h-[520px]">
+                  <HglView tree={built.tree} inverts={built.inverts} opts={opts} />
                 </div>
               </TabsContent>
               <TabsContent value="inp" className="mt-3">
