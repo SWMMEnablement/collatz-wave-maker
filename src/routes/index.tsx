@@ -7,6 +7,7 @@ import { InpPreview } from "@/components/InpPreview";
 import { HolyTreeCanvas } from "@/components/HolyTreeCanvas";
 import { HglView } from "@/components/HglView";
 import { EngineRunner } from "@/components/EngineRunner";
+import { DocsView } from "@/components/DocsView";
 import { buildInp, defaultOptions, type InpOptions } from "@/lib/swmm/inp";
 
 export const Route = createFileRoute("/")({
@@ -85,6 +86,7 @@ function Page() {
                 <TabsTrigger value="hgl">HGL</TabsTrigger>
                 <TabsTrigger value="inp">INP text</TabsTrigger>
                 <TabsTrigger value="engine">Engine</TabsTrigger>
+                <TabsTrigger value="docs">Docs</TabsTrigger>
               </TabsList>
               <TabsContent value="visual" className="mt-3">
                 <div className="h-[75vh] min-h-[520px]">
@@ -108,6 +110,11 @@ function Page() {
               <TabsContent value="engine" className="mt-3">
                 <div className="h-[75vh] min-h-[520px]">
                   <EngineRunner built={built} />
+                </div>
+              </TabsContent>
+              <TabsContent value="docs" className="mt-3">
+                <div className="h-[75vh] min-h-[520px]">
+                  <DocsView opts={opts} />
                 </div>
               </TabsContent>
             </Tabs>
