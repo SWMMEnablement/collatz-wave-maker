@@ -47,6 +47,7 @@ export interface BuildResult {
   tree: CollatzTree;
   coords: Map<number, [number, number]>;
   inverts: Map<number, number>;
+  endTimeSec: number;
 }
 
 const pad = (s: string | number, w: number) => String(s).padEnd(w);
