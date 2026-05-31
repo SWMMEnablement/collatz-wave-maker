@@ -166,7 +166,7 @@ export function EngineRunner({ built }: Props) {
                       fontSize={11}
                     />
                     <YAxis
-                      label={{ value: "depth", angle: -90, position: "insideLeft" }}
+                      label={{ value: chartData.yLabel, angle: -90, position: "insideLeft" }}
                       stroke="hsl(var(--muted-foreground))"
                       fontSize={11}
                     />
@@ -178,12 +178,12 @@ export function EngineRunner({ built }: Props) {
                       }}
                     />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
-                    {chartData.keys.map((n, i) => (
+                    {chartData.keys.map((k, i) => (
                       <Line
-                        key={n}
+                        key={k}
                         type="monotone"
-                        dataKey={"n" + n}
-                        name={`node ${n}`}
+                        dataKey={k}
+                        name={chartData.labels?.[i] ?? k}
                         stroke={palette[i % palette.length]}
                         dot={false}
                         strokeWidth={2}
