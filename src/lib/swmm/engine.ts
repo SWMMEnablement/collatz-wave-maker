@@ -137,23 +137,37 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
     let out: Uint8Array | null = null;
     const times: number[] = [];
     const series: NodeSeries[] = [];
+    const links: LinkSeries[] = [];
     try {
       out = mod.FS.readFile("/output.out") as Uint8Array;
       const parsed = parseSwmmOut(out);
       if (parsed) {
         log.push(
-          `parsed .out: ${parsed.nPeriods} periods, ${parsed.nodeIds.length} nodes, errorCode=${parsed.errorCode}`,
+          `parsed .out: ${parsed.nPeriods} periods, ${parsed.nodeIds.length} nodes, ${parsed.linkIds.length} links, errorCode=${parsed.errorCode}`,
         );
         for (let i = 0; i < parsed.times.length; i++) times.push(parsed.times[i]);
         for (let i = 0; i < parsed.nodeIds.length; i++) {
           const id = parsed.nodeIds[i];
-          // node IDs in our INPs are "Nn" where n = integer.
-          const m = /^N(\d+)$/.exec(id);
+          const m = /^N?(\d+)$/.exec(id);
           const node = m ? Number(m[1]) : i + 1;
           series.push({
             node,
             depth: Array.from(parsed.nodeDepth[i]),
             inflow: Array.from(parsed.nodeTotalInflow[i]),
+          });
+        }
+        // map link id "C{cid}" back to from/to using built.tree.edges order
+        const edges = built.tree.edges;
+        for (let i = 0; i < parsed.linkIds.length; i++) {
+          const id = parsed.linkIds[i];
+          const m = /^C(\d+)$/.exec(id);
+          const idx = m ? Number(m[1]) - 1 : i;
+          const e = edges[idx];
+          links.push({
+            id,
+            from: e ? e[0] : -1,
+            to: e ? e[1] : -1,
+            flow: Array.from(parsed.linkFlow[i]),
           });
         }
       } else {
@@ -170,6 +184,7 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
       out,
       times,
       series,
+      links,
       engine: "wasm",
       log: log.join("\n"),
       durationMs: performance.now() - t0,
@@ -181,6 +196,7 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
       out: null,
       times: [],
       series: [],
+      links: [],
       engine: "wasm",
       log: log.join("\n"),
       durationMs: performance.now() - t0,
