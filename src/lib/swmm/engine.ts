@@ -60,8 +60,8 @@ async function loadWasmModule(): Promise<EmscriptenModule | null> {
       if (!window.createSwmmModule) return null;
       const mod = await window.createSwmmModule({
         locateFile: (p: string) => "/wasm/" + p,
-        print: () => {},
-        printErr: () => {},
+        print: (s: string) => console.log("[swmm]", s),
+        printErr: (s: string) => console.warn("[swmm]", s),
       });
       return mod;
     } catch {
@@ -71,38 +71,97 @@ async function loadWasmModule(): Promise<EmscriptenModule | null> {
   return modulePromise;
 }
 
-async function runWasm(inp: string): Promise<EngineResult | null> {
+async function runWasm(built: BuildResult): Promise<EngineResult | null> {
   const mod = await loadWasmModule();
   if (!mod) return null;
   const t0 = performance.now();
   const log: string[] = [];
+  const stdout: string[] = [];
+  // Capture print output for this run.
+  const origPrint = (mod as unknown as { print?: (s: string) => void }).print;
+  (mod as unknown as { print: (s: string) => void }).print = (s: string) => {
+    stdout.push(s);
+  };
   try {
-    mod.FS.writeFile("/input.inp", inp);
-    mod.FS.writeFile("/report.rpt", "");
-    mod.FS.writeFile("/output.out", new Uint8Array());
+    mod.FS.writeFile("/input.inp", built.inp);
+    // Pre-create empty files so swmm_run can open them for writing.
+    try { mod.FS.unlink?.("/report.rpt"); } catch { /* ignore */ }
+    try { mod.FS.unlink?.("/output.out"); } catch { /* ignore */ }
 
-    const runner =
-      mod.cwrap?.("swmm_run", "number", ["string", "string", "string"]) ??
-      null;
+    const runner = mod.cwrap?.("swmm_run", "number", ["string", "string", "string"]);
     let rc = -1;
     if (runner) {
       rc = Number(runner("/input.inp", "/report.rpt", "/output.out"));
-    } else if (mod.callMain) {
-      rc = mod.callMain(["/input.inp", "/report.rpt", "/output.out"]);
+    } else {
+      throw new Error("swmm_run not exported");
     }
     log.push(`swmm_run returned ${rc}`);
-    const rpt = mod.FS.readFile("/report.rpt", { encoding: "utf8" }) as string;
+
+    // Pull error string if any.
+    if (rc !== 0) {
+      const getErr = mod.cwrap?.("swmm_getError", "number", ["number", "number"]);
+      if (getErr) {
+        const len = 256;
+        const ptr = (mod as unknown as { _malloc: (n: number) => number })._malloc(len);
+        try {
+          getErr(ptr, len);
+          const HEAPU8 = (mod as unknown as { HEAPU8: Uint8Array }).HEAPU8;
+          let s = "";
+          for (let i = 0; i < len; i++) {
+            const c = HEAPU8[ptr + i];
+            if (!c) break;
+            s += String.fromCharCode(c);
+          }
+          if (s) log.push("error: " + s);
+        } finally {
+          (mod as unknown as { _free: (p: number) => void })._free(ptr);
+        }
+      }
+    }
+
+    let rpt = "";
+    try {
+      rpt = mod.FS.readFile("/report.rpt", { encoding: "utf8" }) as string;
+    } catch (e) {
+      log.push("read rpt failed: " + (e as Error).message);
+    }
+
     let out: Uint8Array | null = null;
+    const times: number[] = [];
+    const series: NodeSeries[] = [];
     try {
       out = mod.FS.readFile("/output.out") as Uint8Array;
-    } catch {
-      out = null;
+      const parsed = parseSwmmOut(out);
+      if (parsed) {
+        log.push(
+          `parsed .out: ${parsed.nPeriods} periods, ${parsed.nodeIds.length} nodes, errorCode=${parsed.errorCode}`,
+        );
+        for (let i = 0; i < parsed.times.length; i++) times.push(parsed.times[i]);
+        for (let i = 0; i < parsed.nodeIds.length; i++) {
+          const id = parsed.nodeIds[i];
+          // node IDs in our INPs are "Nn" where n = integer.
+          const m = /^N(\d+)$/.exec(id);
+          const node = m ? Number(m[1]) : i + 1;
+          series.push({
+            node,
+            depth: Array.from(parsed.nodeDepth[i]),
+            inflow: Array.from(parsed.nodeTotalInflow[i]),
+          });
+        }
+      } else {
+        log.push("parse .out failed (magic / layout mismatch)");
+      }
+    } catch (e) {
+      log.push("read out failed: " + (e as Error).message);
     }
+
+    if (stdout.length) log.push("--- stdout ---", ...stdout);
+
     return {
       rpt,
       out,
-      times: [],
-      series: [],
+      times,
+      series,
       engine: "wasm",
       log: log.join("\n"),
       durationMs: performance.now() - t0,
@@ -110,7 +169,7 @@ async function runWasm(inp: string): Promise<EngineResult | null> {
   } catch (e) {
     log.push("wasm error: " + (e as Error).message);
     return {
-      rpt: log.join("\n"),
+      rpt: "",
       out: null,
       times: [],
       series: [],
@@ -118,6 +177,8 @@ async function runWasm(inp: string): Promise<EngineResult | null> {
       log: log.join("\n"),
       durationMs: performance.now() - t0,
     };
+  } finally {
+    if (origPrint) (mod as unknown as { print: (s: string) => void }).print = origPrint;
   }
 }
 
