@@ -11,6 +11,8 @@ export interface InpOptions {
   roughness: number;
   diameter: number;
   layoutMode: LayoutMode;
+  dwfBaseflow: number; // user-defined DWF average flow at each junction
+  dwfPattern: string;  // optional pattern name ("" = none)
 }
 
 export const defaultOptions: InpOptions = {
@@ -23,6 +25,8 @@ export const defaultOptions: InpOptions = {
   roughness: 0.013,
   diameter: 1.0,
   layoutMode: "symmetric",
+  dwfBaseflow: 0.1,
+  dwfPattern: "",
 };
 
 export interface BuildResult {
@@ -31,6 +35,7 @@ export interface BuildResult {
   conduitCount: number;
   tree: CollatzTree;
   coords: Map<number, [number, number]>;
+  inverts: Map<number, number>;
 }
 
 const pad = (s: string | number, w: number) => String(s).padEnd(w);
