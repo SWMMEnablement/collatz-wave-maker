@@ -72,8 +72,12 @@ export function buildInp(opts: InpOptions): BuildResult {
   push("REPORT_STEP          00:05:00");
   push("WET_STEP             00:05:00");
   push("DRY_STEP             01:00:00");
-  push("ROUTING_STEP         0:00:30");
-  push();
+  push("ROUTING_STEP         0:00:10");
+  push("LENGTHENING_STEP     5");
+  push("INERTIAL_DAMPING     PARTIAL");
+  push("NORMAL_FLOW_LIMITED  BOTH");
+  push("VARIABLE_STEP        0.75");
+  push("MIN_SURFAREA         12.566");
 
   push("[EVAPORATION]");
   push("CONSTANT  0.0");
