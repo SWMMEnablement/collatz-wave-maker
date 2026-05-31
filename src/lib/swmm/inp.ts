@@ -147,6 +147,7 @@ export function buildInp(opts: InpOptions): BuildResult {
     inp: lines.join("\n"),
     nodeCount: tree.nodes.size,
     conduitCount: cid,
+    tree,
+    coords,
   };
-  void maxD;
 }
