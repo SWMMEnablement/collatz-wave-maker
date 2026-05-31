@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { GeneratorForm } from "@/components/GeneratorForm";
 import { InpPreview } from "@/components/InpPreview";
+import { HolyTreeCanvas } from "@/components/HolyTreeCanvas";
 import { buildInp, defaultOptions, type InpOptions } from "@/lib/swmm/inp";
 
 export const Route = createFileRoute("/")({
@@ -67,12 +69,23 @@ function Page() {
             </p>
           </aside>
 
-          <section className="h-[70vh] min-h-[500px]">
-            <InpPreview
-              inp={built.inp}
-              nodeCount={built.nodeCount}
-              conduitCount={built.conduitCount}
-            />
+          <section className="h-[75vh] min-h-[520px]">
+            <Tabs defaultValue="visual" className="flex h-full flex-col">
+              <TabsList className="self-start">
+                <TabsTrigger value="visual">Visual</TabsTrigger>
+                <TabsTrigger value="inp">INP text</TabsTrigger>
+              </TabsList>
+              <TabsContent value="visual" className="mt-3 flex-1 min-h-0">
+                <HolyTreeCanvas tree={built.tree} coords={built.coords} />
+              </TabsContent>
+              <TabsContent value="inp" className="mt-3 flex-1 min-h-0">
+                <InpPreview
+                  inp={built.inp}
+                  nodeCount={built.nodeCount}
+                  conduitCount={built.conduitCount}
+                />
+              </TabsContent>
+            </Tabs>
           </section>
         </div>
       </div>

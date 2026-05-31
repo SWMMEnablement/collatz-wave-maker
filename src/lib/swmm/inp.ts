@@ -1,5 +1,5 @@
-import { buildTree } from "../collatz";
-import { layoutRadial } from "./layout";
+import { buildTree, type CollatzTree } from "../collatz";
+import { layoutFor, type LayoutMode } from "./layout";
 
 export interface InpOptions {
   maxSeed: number;
@@ -10,6 +10,7 @@ export interface InpOptions {
   conduitLength: number;
   roughness: number;
   diameter: number;
+  layoutMode: LayoutMode;
 }
 
 export const defaultOptions: InpOptions = {
@@ -21,20 +22,22 @@ export const defaultOptions: InpOptions = {
   conduitLength: 400,
   roughness: 0.013,
   diameter: 1.0,
+  layoutMode: "symmetric",
 };
 
 export interface BuildResult {
   inp: string;
   nodeCount: number;
   conduitCount: number;
+  tree: CollatzTree;
+  coords: Map<number, [number, number]>;
 }
 
 const pad = (s: string | number, w: number) => String(s).padEnd(w);
 
 export function buildInp(opts: InpOptions): BuildResult {
   const tree = buildTree(opts.maxSeed);
-  const coords = layoutRadial(tree);
-  const maxD = Math.max(...tree.depth.values());
+  const coords = layoutFor(tree, opts.layoutMode);
 
   const lines: string[] = [];
   const push = (s = "") => lines.push(s);
@@ -144,6 +147,7 @@ export function buildInp(opts: InpOptions): BuildResult {
     inp: lines.join("\n"),
     nodeCount: tree.nodes.size,
     conduitCount: cid,
+    tree,
+    coords,
   };
-  void maxD;
 }

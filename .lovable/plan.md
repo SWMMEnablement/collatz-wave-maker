@@ -1,64 +1,32 @@
-## Collatz → SWMM5 INP Generator
+## Add Holy Tree visualization
 
-A single-page tool that builds a "Holy Tree" SWMM5 network from Collatz sequences and exports a valid `.inp` file. Includes a stub WASM-style runner placeholder so the engine slot is wired up and ready to swap for a real `swmm5.wasm` later.
+Render the Collatz network as a 2D graph next to the .inp preview, styled after the reference image (deep black background, magenta/pink branches, soft blue node halos, mirrored radial bloom).
 
-### User flow
+### Layout change
+- New tabbed right pane: **Visual** (default) | **INP text**
+- Both share the same `built` state from `buildInp(opts)`
 
-1. User sets parameters (range, units, geometry defaults).
-2. App computes Collatz transitions for all integers 1..N.
-3. App generates a SWMM5 `.inp` text following EPA SWMM5 format.
-4. Preview pane shows the first ~200 lines + stats (junction count, conduit count).
-5. Download button saves `collatz_holy_tree.inp`.
+### Visualization
+- New component `src/components/HolyTreeCanvas.tsx` — SVG (scales cleanly, no canvas DPR math)
+- Reuse `layoutRadial` coordinates already produced; auto-fit viewBox to node bounds with padding
+- Edges: thin magenta strokes (`oklch` pink/red), opacity scaled by depth so trunk reads bold and tips fade
+- Nodes: small circles, blue→violet by depth, subtle glow via SVG `<filter>` gaussian blur
+- Outfall node (1) highlighted larger in amber (matches existing primary token)
+- Background: near-black panel, same border/rounding as InpPreview
+- Hover a node → tooltip with integer value + depth
+- Performance: for N up to 2000 this is a few thousand SVG elements — acceptable; if >1500 nodes, drop node circles and render edges only
 
-### Inputs (UI)
-
-- **Max seed N** (slider, 2–2000, default 100)
-- **Flow units** (CFS / LPS / CMS)
-- **Outfall node** (auto: node `1` becomes the outfall — every Collatz sequence ends at 1)
-- **Junction defaults**: invert elevation base, max depth
-- **Conduit defaults**: length, roughness (Manning's n), geometry (circular diameter)
-- **Coordinates**: simple radial/tree layout computed from each integer's depth in the tree (distance from 1)
-
-### .inp sections generated
-
-```
-[TITLE]
-[OPTIONS]            FLOW_UNITS, INFILTRATION, FLOW_ROUTING, START/END times, step sizes
-[JUNCTIONS]          one per unique integer (excluding 1)
-[OUTFALLS]           integer 1
-[CONDUITS]           one per Collatz transition n -> next(n)
-[XSECTIONS]          CIRCULAR, default diameter
-[COORDINATES]        x,y per node (tree layout)
-[REPORT]             INPUT YES, CONTROLS NO, NODES ALL, LINKS ALL
-```
-
-Elevations slope downhill toward node 1 so the network is hydraulically valid (depth-in-tree determines invert).
-
-### Engine slot (stub)
-
-- `src/lib/swmm/engine.ts` exports `runSwmm(inpText): Promise<{ ok: boolean; message: string }>`.
-- Current implementation: returns `{ ok: false, message: "WASM engine not loaded. Drop swmm5.wasm into /public/wasm/ to enable simulation." }`.
-- `/public/wasm/README.md` documents the expected file + exported symbols so a real EPA SWMM5 Emscripten build can be dropped in later without UI changes.
-- No "Run" button in the UI for now (scope = generate + download only), but the engine module exists so the wiring is ready.
-
-### Visual design
-
-Dark theme inspired by the reference image: near-black background, amber/orange accents (the "Holy Tree" color), monospace for the .inp preview, generous whitespace. Single-screen layout: controls on the left, live preview + download on the right. No charts, no topology render (per scope answer).
+### New layout mode toggle (small addition to form)
+- "Layout: Radial | Symmetric bloom" — symmetric mirrors the tree left/right around node 1 to evoke the reference image's bilateral symmetry. Implemented in `layout.ts` as `layoutSymmetric()` (splits depth-1 children into two halves, places each subtree in its own half-plane).
 
 ### Files
+- new `src/components/HolyTreeCanvas.tsx`
+- edit `src/lib/swmm/layout.ts` — add `layoutSymmetric`
+- edit `src/lib/swmm/inp.ts` — accept `layoutMode: "radial" | "symmetric"` in `InpOptions`, use it for `[COORDINATES]` and expose chosen `coords` from `buildInp`
+- edit `src/components/GeneratorForm.tsx` — layout toggle
+- edit `src/routes/index.tsx` — tabs (shadcn `Tabs`) with Visual + INP panes
 
-- `src/routes/index.tsx` — page (replaces placeholder)
-- `src/lib/collatz.ts` — sequence + tree builder
-- `src/lib/swmm/inp.ts` — .inp string builder
-- `src/lib/swmm/layout.ts` — node coordinate layout
-- `src/lib/swmm/engine.ts` — WASM engine stub interface
-- `src/components/GeneratorForm.tsx`, `InpPreview.tsx`
-- `src/styles.css` — dark amber tokens
-- `public/wasm/README.md` — instructions for adding real swmm5.wasm
-
-### Out of scope (per your answers)
-
-- Running the simulation in-browser
-- Topology visualization
-- Single-seed mode
-- Compiling EPA SWMM5 to WASM
+### Out of scope
+- 3D / WebGL rendering
+- Pan/zoom controls (auto-fit only)
+- Animated flow simulation

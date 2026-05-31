@@ -53,6 +53,20 @@ export function GeneratorForm({ value, onChange }: Props) {
         </Select>
       </div>
 
+      <div className="space-y-2">
+        <Label>Layout</Label>
+        <Select
+          value={value.layoutMode}
+          onValueChange={(v) => set("layoutMode", v as InpOptions["layoutMode"])}
+        >
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="symmetric">Symmetric bloom</SelectItem>
+            <SelectItem value="radial">Radial rings</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
         <Field label="Base invert"><Input type="number" value={value.baseInvert} onChange={num("baseInvert")} /></Field>
         <Field label="Invert drop / step"><Input type="number" value={value.invertDrop} onChange={num("invertDrop")} /></Field>
