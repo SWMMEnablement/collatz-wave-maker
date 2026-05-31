@@ -5,6 +5,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { GeneratorForm } from "@/components/GeneratorForm";
 import { InpPreview } from "@/components/InpPreview";
 import { HolyTreeCanvas } from "@/components/HolyTreeCanvas";
+import { HglView } from "@/components/HglView";
 import { buildInp, defaultOptions, type InpOptions } from "@/lib/swmm/inp";
 
 export const Route = createFileRoute("/")({
