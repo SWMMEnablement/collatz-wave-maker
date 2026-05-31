@@ -188,5 +188,6 @@ export function buildInp(opts: InpOptions): BuildResult {
     tree,
     coords,
     inverts,
+    endTimeSec: opts.endTimeSec,
   };
 }
