@@ -11,11 +11,19 @@ export interface NodeSeries {
   inflow: number[];
 }
 
+export interface LinkSeries {
+  id: string;
+  from: number;
+  to: number;
+  flow: number[];
+}
+
 export interface EngineResult {
   rpt: string;
   out: Uint8Array | null;
   times: number[]; // minutes
   series: NodeSeries[];
+  links: LinkSeries[];
   engine: "wasm" | "stub";
   log: string;
   durationMs: number;
