@@ -28,7 +28,7 @@ export function HolyTreeCanvas({ tree, coords }: Props) {
     };
   }, [coords, tree]);
 
-  const heavy = tree.nodes.size > 1500;
+  const heavy = false;
 
   return (
     <div className="relative h-full min-h-0 overflow-hidden rounded-lg border border-border bg-[#08060c]">
@@ -98,8 +98,10 @@ export function HolyTreeCanvas({ tree, coords }: Props) {
                     key={n}
                     cx={p[0]}
                     cy={p[1]}
-                    r={6}
-                    fill="oklch(0.78 0.17 65)"
+                    r={10}
+                    fill="oklch(0.82 0.18 65)"
+                    stroke="oklch(0.95 0.05 65)"
+                    strokeWidth={1.2}
                     filter="url(#glow)"
                     onMouseEnter={() => setHover(n)}
                     onMouseLeave={() => setHover(null)}
@@ -108,16 +110,20 @@ export function HolyTreeCanvas({ tree, coords }: Props) {
               }
               const d = tree.depth.get(n) ?? 0;
               const t = d / maxDepth;
-              const r = Math.max(0.8, 2.2 - t * 1.4);
-              const fill = `hsl(${230 - t * 30}, 90%, ${60 + t * 15}%)`;
+              const r = Math.max(2.2, 5 - t * 2.5);
+              const fill = `hsl(${230 - t * 30}, 95%, ${65 + t * 15}%)`;
               return (
                 <circle
                   key={n}
-                  cx={p[0]}
-                  cy={p[1]}
-                  r={r}
+                  cx={+p[0].toFixed(2)}
+                  cy={+p[1].toFixed(2)}
+                  r={+r.toFixed(2)}
                   fill={fill}
-                  fillOpacity={0.9 - t * 0.3}
+                  fillOpacity={+(0.95 - t * 0.25).toFixed(3)}
+                  stroke="hsl(280, 100%, 85%)"
+                  strokeOpacity={+(0.4 - t * 0.25).toFixed(3)}
+                  strokeWidth={0.4}
+                  filter="url(#glow)"
                   onMouseEnter={() => setHover(n)}
                   onMouseLeave={() => setHover(null)}
                 />
