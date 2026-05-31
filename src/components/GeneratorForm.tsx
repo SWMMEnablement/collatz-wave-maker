@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { InpOptions } from "@/lib/swmm/inp";
+import { LAYOUT_OPTIONS } from "@/lib/swmm/layout";
 
 interface Props {
   value: InpOptions;
