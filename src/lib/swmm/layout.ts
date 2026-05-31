@@ -24,7 +24,7 @@ export const LAYOUT_OPTIONS: { value: LayoutMode; label: string }[] = [
   { value: "spiral", label: "Ulam spiral" },
   { value: "arc", label: "Arc diagram" },
   { value: "stopping-time", label: "Stopping-time isochrone" },
-  { value: "parity-grid", label: "Parity-colored grid" },
+  { value: "parity-grid", label: "Parity grid" },
 ];
 
 // ---------- helpers ----------
@@ -65,20 +65,22 @@ function maxDepth(tree: CollatzTree): number {
   return m || 1;
 }
 
-// stopping time = depth (BFS distance from 1 along reverse edges)
-// already stored in tree.depth
+function nodesByDepth(tree: CollatzTree): Map<number, number[]> {
+  const byD = new Map<number, number[]>();
+  for (const [n, d] of tree.depth) {
+    if (!byD.has(d)) byD.set(d, []);
+    byD.get(d)!.push(n);
+  }
+  for (const list of byD.values()) list.sort((a, b) => a - b);
+  return byD;
+}
 
 // ---------- 1. Radial rings ----------
 
 export function layoutRadial(tree: CollatzTree): Map<number, [number, number]> {
-  const byDepth = new Map<number, number[]>();
-  for (const [n, d] of tree.depth) {
-    if (!byDepth.has(d)) byDepth.set(d, []);
-    byDepth.get(d)!.push(n);
-  }
+  const byDepth = nodesByDepth(tree);
   const coords = new Map<number, [number, number]>();
   for (const [d, list] of byDepth) {
-    list.sort((a, b) => a - b);
     if (d === 0) {
       coords.set(list[0], [0, 0]);
       continue;
@@ -100,14 +102,108 @@ export function layoutSymmetric(
 ): Map<number, [number, number]> {
   const children = childrenMap(tree);
   const weight = subtreeLeaves(children, 1);
-
   const coords = new Map<number, [number, number]>();
   coords.set(1, [0, 0]);
+
+  const placeSubtree = (
+    n: number,
+    aStart: number,
+    aEnd: number,
+    depthScale: number,
+  ) => {
+    const d = tree.depth.get(n) ?? 1;
+    const r = d * depthScale;
+    const a = (aStart + aEnd) / 2;
+    coords.set(n, [r * Math.cos(a), r * Math.sin(a)]);
+    const kids = children.get(n) ?? [];
+    if (!kids.length) return;
+    const totalW = kids.reduce((s, k) => s + (weight.get(k) ?? 1), 0) || 1;
+    let cursor = aStart;
+    for (const k of kids) {
+      const w = weight.get(k) ?? 1;
+      const span = ((aEnd - aStart) * w) / totalW;
+      placeSubtree(k, cursor, cursor + span, depthScale);
+      cursor += span;
+    }
+  };
+
+  const place = (list: number[], aStart: number, aEnd: number, ds: number) => {
+    const totalW = list.reduce((s, n) => s + (weight.get(n) ?? 1), 0) || 1;
+    let cursor = aStart;
+    for (const root of list) {
+      const w = weight.get(root) ?? 1;
+      const span = ((aEnd - aStart) * w) / totalW;
+      placeSubtree(root, cursor, cursor + span, ds);
+      cursor += span;
+    }
+  };
 
   const roots = children.get(1) ?? [];
   const half = Math.ceil(roots.length / 2);
   const leftRoots = roots.slice(0, half);
   const rightRoots = roots.slice(half);
+  const ds = 55;
+  place(rightRoots, -Math.PI / 2, Math.PI / 2, ds);
+  place(leftRoots, Math.PI / 2, (3 * Math.PI) / 2, ds);
+  return coords;
+}
 
-  const placeSubtree = (
-    n: number
+// ---------- 3. Reingold–Tilford tidy tree ----------
+// Simple Walker-style: assign each subtree a horizontal slot proportional to
+// its leaf count, then center parents over their children. Root at top.
+
+export function layoutReingoldTilford(
+  tree: CollatzTree,
+): Map<number, [number, number]> {
+  const children = childrenMap(tree);
+  const leaves = subtreeLeaves(children, 1);
+  const coords = new Map<number, [number, number]>();
+  const xStep = 28;
+  const yStep = 60;
+
+  const place = (n: number, xStart: number): number => {
+    const d = tree.depth.get(n) ?? 0;
+    const kids = children.get(n) ?? [];
+    if (!kids.length) {
+      coords.set(n, [xStart * xStep, d * yStep]);
+      return xStart + 1;
+    }
+    let cursor = xStart;
+    const firstX = cursor;
+    for (const k of kids) cursor = place(k, cursor);
+    const lastX = cursor - 1;
+    const cx = ((firstX + lastX) / 2) * xStep;
+    coords.set(n, [cx, d * yStep]);
+    return cursor;
+  };
+  place(1, 0);
+
+  // shift so root is at x=0
+  const [rx] = coords.get(1) ?? [0, 0];
+  for (const [n, [x, y]] of coords) coords.set(n, [x - rx, y]);
+  // y inverted so root is on top -> outfall visually at top
+  return coords;
+}
+
+// ---------- 4. Dendrogram: leaves aligned at max depth ----------
+
+export function layoutDendrogram(
+  tree: CollatzTree,
+): Map<number, [number, number]> {
+  const children = childrenMap(tree);
+  const md = maxDepth(tree);
+  const coords = new Map<number, [number, number]>();
+  const xStep = 24;
+  const yStep = 50;
+  let leafCursor = 0;
+
+  const place = (n: number): number => {
+    const kids = children.get(n) ?? [];
+    if (!kids.length) {
+      const x = leafCursor++ * xStep;
+      coords.set(n, [x, md * yStep]);
+      return x;
+    }
+    const xs = kids.map(place);
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const d = tree
