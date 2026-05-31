@@ -32,7 +32,7 @@ export function GeneratorForm({ value, onChange }: Props) {
         </div>
         <Slider
           min={2}
-          max={2000}
+          max={100000}
           step={1}
           value={[value.maxSeed]}
           onValueChange={([v]) => set("maxSeed", v)}
