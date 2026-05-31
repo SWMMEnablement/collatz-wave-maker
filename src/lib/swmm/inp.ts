@@ -76,7 +76,7 @@ export function buildInp(opts: InpOptions): BuildResult {
   push("REPORT_START_DATE    01/01/2024");
   push("REPORT_START_TIME    00:00:00");
   push("END_DATE             01/01/2024");
-  push("END_TIME             06:00:00");
+  push(`END_TIME             ${secsToHMS(opts.endTimeSec)}`);
   push("SWEEP_START          01/01");
   push("SWEEP_END            12/31");
   push("DRY_DAYS             0");
