@@ -69,21 +69,25 @@ function Page() {
             </p>
           </aside>
 
-          <section className="h-[75vh] min-h-[520px]">
-            <Tabs defaultValue="visual" className="flex h-full flex-col">
-              <TabsList className="self-start">
+          <section>
+            <Tabs defaultValue="visual">
+              <TabsList>
                 <TabsTrigger value="visual">Visual</TabsTrigger>
                 <TabsTrigger value="inp">INP text</TabsTrigger>
               </TabsList>
-              <TabsContent value="visual" className="mt-3 flex-1 min-h-0">
-                <HolyTreeCanvas tree={built.tree} coords={built.coords} />
+              <TabsContent value="visual" className="mt-3">
+                <div className="h-[75vh] min-h-[520px]">
+                  <HolyTreeCanvas tree={built.tree} coords={built.coords} />
+                </div>
               </TabsContent>
-              <TabsContent value="inp" className="mt-3 flex-1 min-h-0">
-                <InpPreview
-                  inp={built.inp}
-                  nodeCount={built.nodeCount}
-                  conduitCount={built.conduitCount}
-                />
+              <TabsContent value="inp" className="mt-3">
+                <div className="h-[75vh] min-h-[520px]">
+                  <InpPreview
+                    inp={built.inp}
+                    nodeCount={built.nodeCount}
+                    conduitCount={built.conduitCount}
+                  />
+                </div>
               </TabsContent>
             </Tabs>
           </section>
