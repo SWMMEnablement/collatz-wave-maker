@@ -18,6 +18,7 @@ export interface ParsedOut {
   times: number[];
   nodeDepth: Float32Array[];
   nodeTotalInflow: Float32Array[];
+  linkFlow: Float32Array[];
 }
 
 const MAGIC = 516114522;
