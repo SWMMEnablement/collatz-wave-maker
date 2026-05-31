@@ -26,7 +26,6 @@ export const Route = createFileRoute("/")({
 
 function Page() {
   const [opts, setOpts] = useState<InpOptions>(defaultOptions);
-
   const built = useMemo(() => buildInp(opts), [opts]);
 
   const download = () => {
@@ -42,15 +41,41 @@ function Page() {
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-7xl px-6 py-10">
-        <header className="mb-10 flex items-end justify-between gap-6 border-b border-border pb-6">
-          <div>
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">
-              Holy Tree · SWMM5
+        <header className="mb-10 border-b border-border pb-6">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">
+            Holy Tree · SWMM5
+          </p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight md:text-4xl">
+            Collatz <span className="text-primary">→</span> SWMM5 .inp generator
+          </h1>
+          <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
+            Every integer in 1..N becomes a junction. Every Collatz step
+            (n/2 or 3n+1) becomes a conduit. Node 1 is the outfall — all
+            flows drain to it. A stub WASM SWMM5 engine slot is wired and
+            ready for a real <code className="font-mono text-primary">swmm5.wasm</code> drop-in.
+          </p>
+        </header>
+
+        <div className="grid gap-8 lg:grid-cols-[360px_1fr]">
+          <aside className="space-y-6">
+            <GeneratorForm value={opts} onChange={setOpts} />
+            <Button onClick={download} className="w-full" size="lg">
+              Download .inp
+            </Button>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              engine: stub · wasm slot: /public/wasm/
             </p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight md:text-4xl">
-              Collatz <span className="text-primary">→</span> SWMM5 .inp generator
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-              Every integer in 1..N becomes a junction. Every Collatz step
-              (n/2 or 3n+1) becomes a conduit. Node 1 is the outfall — all
-              flows dr
+          </aside>
+
+          <section className="h-[70vh] min-h-[500px]">
+            <InpPreview
+              inp={built.inp}
+              nodeCount={built.nodeCount}
+              conduitCount={built.conduitCount}
+            />
+          </section>
+        </div>
+      </div>
+    </main>
+  );
+}
