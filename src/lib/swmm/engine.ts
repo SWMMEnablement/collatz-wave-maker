@@ -227,7 +227,7 @@ function runStub(built: BuildResult, inp: string): EngineResult {
   for (const n of tree.nodes) countUp(n);
 
   // Use a reporting step of 5 min; derive period count from endTimeSec when present.
-  const endSec = 21600;
+  const endSec = built.endTimeSec || 21600;
   const stepSec = 300;
   const N = Math.max(2, Math.floor(endSec / stepSec) + 1);
   const peakMin = endSec / 60 / 3; // peak ~1/3 into sim
