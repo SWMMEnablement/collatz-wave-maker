@@ -271,4 +271,94 @@ export function layoutSugiyama(tree: CollatzTree): Coords {
   const W = widest * xStep;
   for (const [d, list] of byDepth) {
     const step = list.length > 1 ? W / (list.length - 1) : 0;
-    const x0 = list.length > 
+    const x0 = list.length > 1 ? -W / 2 : 0;
+    list.forEach((n, i) => coords.set(n, [x0 + i * step, d * yStep]));
+  }
+  return coords;
+}
+
+// 8. Ulam spiral (square spiral by integer value)
+export function layoutSpiral(tree: CollatzTree): Coords {
+  const coords: Coords = new Map();
+  const ids = Array.from(tree.nodes).sort((a, b) => a - b);
+  const cellToInt = new Map<number, [number, number]>();
+  // Build square spiral coordinates for ints 1..max(ids)
+  const max = ids[ids.length - 1];
+  let x = 0, y = 0, dx = 0, dy = -1;
+  for (let i = 1; i <= max; i++) {
+    cellToInt.set(i, [x, y]);
+    if (x === y || (x < 0 && x === -y) || (x > 0 && x === 1 - y)) {
+      const t = dx; dx = -dy; dy = t;
+    }
+    x += dx; y += dy;
+  }
+  const step = 22;
+  for (const n of ids) {
+    const c = cellToInt.get(n) ?? [0, 0];
+    coords.set(n, [c[0] * step, c[1] * step]);
+  }
+  return coords;
+}
+
+// 9. Arc diagram: nodes on a horizontal line by integer value
+export function layoutArc(tree: CollatzTree): Coords {
+  const coords: Coords = new Map();
+  const ids = Array.from(tree.nodes).sort((a, b) => a - b);
+  const step = 18;
+  ids.forEach((n, i) => coords.set(n, [i * step, 0]));
+  return coords;
+}
+
+// 10. Stopping-time isochrone: radius = depth, angle by integer ordering
+export function layoutStoppingTime(tree: CollatzTree): Coords {
+  const byDepth = nodesByDepth(tree);
+  const coords: Coords = new Map();
+  const md = maxDepth(tree);
+  const Rmax = md * 45;
+  for (const [d, list] of byDepth) {
+    if (d === 0) { coords.set(list[0], [0, 0]); continue; }
+    const r = (d / md) * Rmax;
+    const step = (2 * Math.PI) / list.length;
+    list.forEach((n, i) => {
+      const a = i * step - Math.PI / 2;
+      coords.set(n, [r * Math.cos(a), r * Math.sin(a)]);
+    });
+  }
+  return coords;
+}
+
+// 11. Parity grid: even/odd lanes by depth row
+export function layoutParityGrid(tree: CollatzTree): Coords {
+  const byDepth = nodesByDepth(tree);
+  const coords: Coords = new Map();
+  const xStep = 26, yStep = 60;
+  for (const [d, list] of byDepth) {
+    const evens = list.filter((n) => n % 2 === 0);
+    const odds = list.filter((n) => n % 2 !== 0);
+    const lay = (arr: number[], side: 1 | -1) => {
+      arr.forEach((n, i) => coords.set(n, [side * (i + 1) * xStep, d * yStep]));
+    };
+    lay(evens, -1);
+    lay(odds, 1);
+    if (d === 0) coords.set(list[0], [0, 0]);
+  }
+  return coords;
+}
+
+// Dispatcher
+export function layoutFor(tree: CollatzTree, mode: LayoutMode): Coords {
+  switch (mode) {
+    case "radial": return layoutRadial(tree);
+    case "symmetric": return layoutSymmetric(tree);
+    case "reingold-tilford": return layoutReingoldTilford(tree);
+    case "dendrogram": return layoutDendrogram(tree);
+    case "sunburst": return layoutSunburst(tree);
+    case "force": return layoutForce(tree);
+    case "sugiyama": return layoutSugiyama(tree);
+    case "spiral": return layoutSpiral(tree);
+    case "arc": return layoutArc(tree);
+    case "stopping-time": return layoutStoppingTime(tree);
+    case "parity-grid": return layoutParityGrid(tree);
+    default: return layoutSymmetric(tree);
+  }
+}
