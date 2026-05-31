@@ -13,6 +13,7 @@ export interface InpOptions {
   layoutMode: LayoutMode;
   dwfBaseflow: number; // user-defined DWF average flow at each junction
   dwfPattern: string;  // optional pattern name ("" = none)
+  endTimeSec: number;  // simulation duration in seconds
 }
 
 export const defaultOptions: InpOptions = {
@@ -27,7 +28,17 @@ export const defaultOptions: InpOptions = {
   layoutMode: "symmetric",
   dwfBaseflow: 0.1,
   dwfPattern: "",
+  endTimeSec: 21600, // 6 hours
 };
+
+function secsToHMS(s: number): string {
+  const sec = Math.max(0, Math.floor(s));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const ss = sec % 60;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(h)}:${p(m)}:${p(ss)}`;
+}
 
 export interface BuildResult {
   inp: string;
