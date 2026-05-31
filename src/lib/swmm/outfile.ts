@@ -1,17 +1,7 @@
 // SWMM5 binary .out file parser.
-// Spec: see EPA SWMM5 source output.c. Layout summary:
-//   [opening records] magic(i32) version(i32) flowUnits(i32)
-//       Nsubcatch(i32) Nnode(i32) Nlink(i32) Npollut(i32)
-//   [object IDs]      for each subcatch/node/link/pollut: len(i32)+chars
-//   [object properties], [reporting variables]
-//   StartDate (f64), ReportStep (i32)
-//   [computed results] per period: dateTime(f64) +
-//       Nsubcatch * NsubVars(f32) + Nnode * NnodeVars(f32) +
-//       Nlink * NlinkVars(f32) + NsysVars(f32)
-//   [closing records] objIDOffset(i32) objPropOffset(i32)
-//       resultsOffset(i32) Nperiods(i32) errorCode(i32) magic(i32)
+// Spec: see EPA SWMM5 source output.c.
 //
-// Per-object variable counts in v5.2 (no pollutants in our INPs):
+// Per-object variable counts (v5.2, no pollutants):
 //   subcatch: 9 + Npoll
 //   node:     6 + Npoll  (depth, head, volume, lateralInflow, totalInflow, overflow)
 //   link:     5 + Npoll  (flow, depth, velocity, volume, capacity)
@@ -19,54 +9,108 @@
 
 export interface ParsedOut {
   flowUnits: number;
-  startDate: number; // SWMM Julian (days since 1899-12-30)
-  reportStep: number; // seconds
+  startDate: number;
+  reportStep: number;
   nPeriods: number;
   errorCode: number;
   nodeIds: string[];
   linkIds: string[];
-  times: number[]; // minutes from start
-  // by node index: arrays of length nPeriods
+  times: number[];
   nodeDepth: Float32Array[];
   nodeTotalInflow: Float32Array[];
 }
 
 const MAGIC = 516114522;
 
-function readI32(dv: DataView, off: number): number {
-  return dv.getInt32(off, true);
-}
-function readF64(dv: DataView, off: number): number {
-  return dv.getFloat64(off, true);
-}
-function readF32(dv: DataView, off: number): number {
-  return dv.getFloat32(off, true);
-}
+const i32 = (dv: DataView, o: number) => dv.getInt32(o, true);
+const f32 = (dv: DataView, o: number) => dv.getFloat32(o, true);
+const f64 = (dv: DataView, o: number) => dv.getFloat64(o, true);
 
 export function parseSwmmOut(buf: Uint8Array): ParsedOut | null {
   if (buf.byteLength < 32) return null;
   const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   const end = buf.byteLength;
 
-  // Closing records (last 24 bytes): 6 Int32s.
-  const magicTail = readI32(dv, end - 4);
-  if (magicTail !== MAGIC) return null;
-  const errorCode = readI32(dv, end - 8);
-  const nPeriods = readI32(dv, end - 12);
-  const resultsOffset = readI32(dv, end - 16);
-  // const objPropOffset = readI32(dv, end - 20);
-  const objIdOffset = readI32(dv, end - 24);
+  if (i32(dv, end - 4) !== MAGIC) return null;
+  const errorCode = i32(dv, end - 8);
+  const nPeriods = i32(dv, end - 12);
+  const resultsOffset = i32(dv, end - 16);
+  // const objPropOffset = i32(dv, end - 20);
+  const objIdOffset = i32(dv, end - 24);
 
-  // Opening header.
-  const magicHead = readI32(dv, 0);
-  if (magicHead !== MAGIC) return null;
-  // version at 4, flow units at 8
-  const flowUnits = readI32(dv, 8);
-  const Nsub = readI32(dv, 12);
-  const Nnode = readI32(dv, 16);
-  const Nlink = readI32(dv, 20);
-  const Npoll = readI32(dv, 24);
+  if (i32(dv, 0) !== MAGIC) return null;
+  const flowUnits = i32(dv, 8);
+  const Nsub = i32(dv, 12);
+  const Nnode = i32(dv, 16);
+  const Nlink = i32(dv, 20);
+  const Npoll = i32(dv, 24);
 
-  // Object IDs section starts at objIdOffset.
-  // Order: subcatch IDs, node IDs, link IDs, pollutant IDs.
-  let
+  // --- Read object IDs (length-prefixed ASCII) ---
+  let off = objIdOffset;
+  const decoder = new TextDecoder("utf-8");
+  const readId = (): string => {
+    const len = i32(dv, off);
+    off += 4;
+    const s = decoder.decode(buf.subarray(off, off + len));
+    off += len;
+    return s;
+  };
+  const subIds: string[] = [];
+  for (let i = 0; i < Nsub; i++) subIds.push(readId());
+  const nodeIds: string[] = [];
+  for (let i = 0; i < Nnode; i++) nodeIds.push(readId());
+  const linkIds: string[] = [];
+  for (let i = 0; i < Nlink; i++) linkIds.push(readId());
+  for (let i = 0; i < Npoll; i++) readId();
+
+  // --- ReportStep + StartDate live just before resultsOffset ---
+  // Layout: ... StartDate(f64) ReportStep(i32) | results...
+  const startDate = f64(dv, resultsOffset - 12);
+  const reportStep = i32(dv, resultsOffset - 4);
+
+  const nSubVars = 9 + Npoll;
+  const nNodeVars = 6 + Npoll;
+  const nLinkVars = 5 + Npoll;
+  const nSysVars = 15;
+
+  // bytes per reporting period: f64 dateTime + all f32 vars
+  const perPeriod =
+    8 +
+    4 * (Nsub * nSubVars + Nnode * nNodeVars + Nlink * nLinkVars + nSysVars);
+
+  const times: number[] = new Array(nPeriods);
+  const nodeDepth: Float32Array[] = Array.from(
+    { length: Nnode },
+    () => new Float32Array(nPeriods),
+  );
+  const nodeTotalInflow: Float32Array[] = Array.from(
+    { length: Nnode },
+    () => new Float32Array(nPeriods),
+  );
+
+  for (let p = 0; p < nPeriods; p++) {
+    const base = resultsOffset + p * perPeriod;
+    if (base + perPeriod > end) break;
+    times[p] = (p * reportStep) / 60; // minutes
+    // skip dateTime f64 + subcatch block
+    const nodesBase = base + 8 + 4 * Nsub * nSubVars;
+    for (let n = 0; n < Nnode; n++) {
+      const nb = nodesBase + n * nNodeVars * 4;
+      nodeDepth[n][p] = f32(dv, nb); // var 0 = depth
+      nodeTotalInflow[n][p] = f32(dv, nb + 16); // var 4 = totalInflow
+    }
+  }
+
+  return {
+    flowUnits,
+    startDate,
+    reportStep,
+    nPeriods,
+    errorCode,
+    nodeIds,
+    linkIds,
+    times,
+    nodeDepth,
+    nodeTotalInflow,
+  };
+}
