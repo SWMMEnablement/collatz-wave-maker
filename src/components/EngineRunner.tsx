@@ -59,7 +59,8 @@ export function EngineRunner({ built }: Props) {
 
   // pick a sensible set of series to chart by metric
   const chartData = (() => {
-    if (!result || result.times.length === 0) return { rows: [], keys: [] as string[], yLabel: "" };
+    if (!result || result.times.length === 0)
+      return { rows: [] as Record<string, number>[], keys: [] as string[], labels: [] as string[], yLabel: "" };
     let entries: { key: string; label: string; values: number[] }[] = [];
     if (metric === "linkflow") {
       entries = [...result.links]
