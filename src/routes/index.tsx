@@ -57,6 +57,13 @@ function Page() {
             flows drain to it. A stub WASM SWMM5 engine slot is wired and
             ready for a real <code className="font-mono text-primary">swmm5.wasm</code> drop-in.
           </p>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+            The Collatz conjecture, also known as the 3n+1 problem, is an unsolved
+            mathematical puzzle: start with any positive integer n; if n is even,
+            divide it by 2, and if n is odd, multiply by 3 and add 1. Repeating
+            this process always seems to reach 1, but no one has proven it for
+            every number.
+          </p>
         </header>
 
         <div className="grid gap-8 lg:grid-cols-[360px_1fr]">
