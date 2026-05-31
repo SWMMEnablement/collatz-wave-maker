@@ -18,6 +18,7 @@ export interface ParsedOut {
   times: number[];
   nodeDepth: Float32Array[];
   nodeTotalInflow: Float32Array[];
+  linkFlow: Float32Array[];
 }
 
 const MAGIC = 516114522;
@@ -87,6 +88,10 @@ export function parseSwmmOut(buf: Uint8Array): ParsedOut | null {
     { length: Nnode },
     () => new Float32Array(nPeriods),
   );
+  const linkFlow: Float32Array[] = Array.from(
+    { length: Nlink },
+    () => new Float32Array(nPeriods),
+  );
 
   for (let p = 0; p < nPeriods; p++) {
     const base = resultsOffset + p * perPeriod;
@@ -98,6 +103,11 @@ export function parseSwmmOut(buf: Uint8Array): ParsedOut | null {
       const nb = nodesBase + n * nNodeVars * 4;
       nodeDepth[n][p] = f32(dv, nb); // var 0 = depth
       nodeTotalInflow[n][p] = f32(dv, nb + 16); // var 4 = totalInflow
+    }
+    const linksBase = nodesBase + 4 * Nnode * nNodeVars;
+    for (let l = 0; l < Nlink; l++) {
+      const lb = linksBase + l * nLinkVars * 4;
+      linkFlow[l][p] = f32(dv, lb); // var 0 = flow
     }
   }
 
@@ -112,5 +122,6 @@ export function parseSwmmOut(buf: Uint8Array): ParsedOut | null {
     times,
     nodeDepth,
     nodeTotalInflow,
+    linkFlow,
   };
 }

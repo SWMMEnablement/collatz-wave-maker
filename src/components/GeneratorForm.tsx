@@ -69,6 +69,32 @@ export function GeneratorForm({ value, onChange }: Props) {
         </Select>
       </div>
 
+      <div className="space-y-2">
+        <div className="flex items-baseline justify-between">
+          <Label>End time (seconds)</Label>
+          <span className="font-mono text-sm text-primary">
+            {value.endTimeSec}s
+            <span className="ml-2 text-muted-foreground">
+              ({(value.endTimeSec / 3600).toFixed(2)} h)
+            </span>
+          </span>
+        </div>
+        <Slider
+          min={60}
+          max={86400}
+          step={60}
+          value={[value.endTimeSec]}
+          onValueChange={([v]) => set("endTimeSec", v)}
+        />
+        <Input
+          type="number"
+          min={1}
+          step={1}
+          value={value.endTimeSec}
+          onChange={num("endTimeSec")}
+        />
+      </div>
+
       <div className="grid grid-cols-2 gap-4">
         <Field label="Base invert"><Input type="number" value={value.baseInvert} onChange={num("baseInvert")} /></Field>
         <Field label="Invert drop / step"><Input type="number" value={value.invertDrop} onChange={num("invertDrop")} /></Field>

@@ -11,11 +11,19 @@ export interface NodeSeries {
   inflow: number[];
 }
 
+export interface LinkSeries {
+  id: string;
+  from: number;
+  to: number;
+  flow: number[];
+}
+
 export interface EngineResult {
   rpt: string;
   out: Uint8Array | null;
   times: number[]; // minutes
   series: NodeSeries[];
+  links: LinkSeries[];
   engine: "wasm" | "stub";
   log: string;
   durationMs: number;
@@ -129,23 +137,37 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
     let out: Uint8Array | null = null;
     const times: number[] = [];
     const series: NodeSeries[] = [];
+    const links: LinkSeries[] = [];
     try {
       out = mod.FS.readFile("/output.out") as Uint8Array;
       const parsed = parseSwmmOut(out);
       if (parsed) {
         log.push(
-          `parsed .out: ${parsed.nPeriods} periods, ${parsed.nodeIds.length} nodes, errorCode=${parsed.errorCode}`,
+          `parsed .out: ${parsed.nPeriods} periods, ${parsed.nodeIds.length} nodes, ${parsed.linkIds.length} links, errorCode=${parsed.errorCode}`,
         );
         for (let i = 0; i < parsed.times.length; i++) times.push(parsed.times[i]);
         for (let i = 0; i < parsed.nodeIds.length; i++) {
           const id = parsed.nodeIds[i];
-          // node IDs in our INPs are "Nn" where n = integer.
-          const m = /^N(\d+)$/.exec(id);
+          const m = /^N?(\d+)$/.exec(id);
           const node = m ? Number(m[1]) : i + 1;
           series.push({
             node,
             depth: Array.from(parsed.nodeDepth[i]),
             inflow: Array.from(parsed.nodeTotalInflow[i]),
+          });
+        }
+        // map link id "C{cid}" back to from/to using built.tree.edges order
+        const edges = Array.from(built.tree.edges.entries());
+        for (let i = 0; i < parsed.linkIds.length; i++) {
+          const id = parsed.linkIds[i];
+          const m = /^C(\d+)$/.exec(id);
+          const idx = m ? Number(m[1]) - 1 : i;
+          const e = edges[idx];
+          links.push({
+            id,
+            from: e ? e[0] : -1,
+            to: e ? e[1] : -1,
+            flow: Array.from(parsed.linkFlow[i]),
           });
         }
       } else {
@@ -162,6 +184,7 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
       out,
       times,
       series,
+      links,
       engine: "wasm",
       log: log.join("\n"),
       durationMs: performance.now() - t0,
@@ -173,6 +196,7 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
       out: null,
       times: [],
       series: [],
+      links: [],
       engine: "wasm",
       log: log.join("\n"),
       durationMs: performance.now() - t0,
@@ -202,20 +226,24 @@ function runStub(built: BuildResult, inp: string): EngineResult {
   };
   for (const n of tree.nodes) countUp(n);
 
-  // 6 hours, 5-minute steps = 73 points; ramp + peak + recede
-  const N = 73;
+  // Use a reporting step of 5 min; derive period count from endTimeSec when present.
+  const endSec = built.endTimeSec || 21600;
+  const stepSec = 300;
+  const N = Math.max(2, Math.floor(endSec / stepSec) + 1);
+  const peakMin = endSec / 60 / 3; // peak ~1/3 into sim
   const times: number[] = [];
   const wave: number[] = [];
   for (let i = 0; i < N; i++) {
-    const m = i * 5;
+    const m = i * (stepSec / 60);
     times.push(m);
-    const x = (m - 120) / 60; // peak ~2h
+    const x = (m - peakMin) / Math.max(30, peakMin / 2);
     wave.push(Math.exp(-x * x * 0.6));
   }
 
-  const baseflow = Math.max(0, Number(built.inp ? 0.1 : 0.1)); // use opts default-ish
+  const baseflow = 0.1;
   const series: NodeSeries[] = [];
   const totalUp = upstream.get(1) ?? 1;
+  const inflowByNode = new Map<number, number[]>();
   for (const n of tree.nodes) {
     const up = upstream.get(n) ?? 1;
     const peakQ = baseflow * up;
@@ -225,6 +253,16 @@ function runStub(built: BuildResult, inp: string): EngineResult {
       +Math.min(cap, Math.log10(1 + q) * 1.5).toFixed(4),
     );
     series.push({ node: n, depth, inflow });
+    inflowByNode.set(n, inflow);
+  }
+
+  // synthesize link flows: flow in conduit ≈ from-node inflow
+  const links: LinkSeries[] = [];
+  let cid = 0;
+  for (const [from, to] of tree.edges) {
+    cid++;
+    const flow = inflowByNode.get(from) ?? wave.map(() => 0);
+    links.push({ id: "C" + cid, from, to, flow: flow.slice() });
   }
 
   const peakDepthByNode = series
@@ -272,6 +310,7 @@ function runStub(built: BuildResult, inp: string): EngineResult {
     out: null,
     times,
     series,
+    links,
     engine: "stub",
     log: `stub run completed in ${(performance.now() - t0).toFixed(1)}ms`,
     durationMs: performance.now() - t0,

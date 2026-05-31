@@ -13,6 +13,7 @@ export interface InpOptions {
   layoutMode: LayoutMode;
   dwfBaseflow: number; // user-defined DWF average flow at each junction
   dwfPattern: string;  // optional pattern name ("" = none)
+  endTimeSec: number;  // simulation duration in seconds
 }
 
 export const defaultOptions: InpOptions = {
@@ -27,7 +28,17 @@ export const defaultOptions: InpOptions = {
   layoutMode: "symmetric",
   dwfBaseflow: 0.1,
   dwfPattern: "",
+  endTimeSec: 21600, // 6 hours
 };
+
+function secsToHMS(s: number): string {
+  const sec = Math.max(0, Math.floor(s));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const ss = sec % 60;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(h)}:${p(m)}:${p(ss)}`;
+}
 
 export interface BuildResult {
   inp: string;
@@ -36,6 +47,7 @@ export interface BuildResult {
   tree: CollatzTree;
   coords: Map<number, [number, number]>;
   inverts: Map<number, number>;
+  endTimeSec: number;
 }
 
 const pad = (s: string | number, w: number) => String(s).padEnd(w);
@@ -65,7 +77,7 @@ export function buildInp(opts: InpOptions): BuildResult {
   push("REPORT_START_DATE    01/01/2024");
   push("REPORT_START_TIME    00:00:00");
   push("END_DATE             01/01/2024");
-  push("END_TIME             06:00:00");
+  push(`END_TIME             ${secsToHMS(opts.endTimeSec)}`);
   push("SWEEP_START          01/01");
   push("SWEEP_END            12/31");
   push("DRY_DAYS             0");
@@ -176,5 +188,6 @@ export function buildInp(opts: InpOptions): BuildResult {
     tree,
     coords,
     inverts,
+    endTimeSec: opts.endTimeSec,
   };
 }

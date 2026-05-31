@@ -2,6 +2,13 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   LineChart,
   Line,
   XAxis,
@@ -18,10 +25,13 @@ interface Props {
   built: BuildResult;
 }
 
+type Metric = "depth" | "inflow" | "linkflow";
+
 export function EngineRunner({ built }: Props) {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<EngineResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [metric, setMetric] = useState<Metric>("depth");
 
   const run = async () => {
     setRunning(true);
@@ -47,22 +57,40 @@ export function EngineRunner({ built }: Props) {
     URL.revokeObjectURL(url);
   };
 
-  // pick a sensible set of nodes to chart: root + a handful of biggest
+  // pick a sensible set of series to chart by metric
   const chartData = (() => {
-    if (!result || result.series.length === 0) return { rows: [], keys: [] as number[] };
-    const top = [...result.series]
-      .sort(
-        (a, b) =>
-          Math.max(...b.depth) - Math.max(...a.depth),
-      )
-      .slice(0, 6);
-    const keys = top.map((s) => s.node);
+    if (!result || result.times.length === 0)
+      return { rows: [] as Record<string, number>[], keys: [] as string[], labels: [] as string[], yLabel: "" };
+    let entries: { key: string; label: string; values: number[] }[] = [];
+    if (metric === "linkflow") {
+      entries = [...result.links]
+        .map((l) => ({
+          key: l.id,
+          label: `${l.id} (${l.from}→${l.to})`,
+          values: l.flow,
+        }))
+        .sort((a, b) => Math.max(...b.values) - Math.max(...a.values))
+        .slice(0, 6);
+    } else {
+      const get = (s: { depth: number[]; inflow: number[] }) =>
+        metric === "depth" ? s.depth : s.inflow;
+      entries = [...result.series]
+        .map((s) => ({
+          key: "n" + s.node,
+          label: `node ${s.node}`,
+          values: get(s),
+        }))
+        .sort((a, b) => Math.max(...b.values) - Math.max(...a.values))
+        .slice(0, 6);
+    }
     const rows = result.times.map((t, i) => {
       const row: Record<string, number> = { t };
-      for (const s of top) row["n" + s.node] = s.depth[i];
+      for (const e of entries) row[e.key] = e.values[i] ?? 0;
       return row;
     });
-    return { rows, keys };
+    const yLabel =
+      metric === "depth" ? "depth" : metric === "inflow" ? "node inflow" : "link flow";
+    return { rows, keys: entries.map((e) => e.key), labels: entries.map((e) => e.label), yLabel };
   })();
 
   const palette = [
@@ -84,8 +112,19 @@ export function EngineRunner({ built }: Props) {
           <>
             <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
               engine: <span className="text-primary">{result.engine}</span> ·{" "}
-              {result.durationMs.toFixed(0)} ms
+              {result.durationMs.toFixed(0)} ms · {result.times.length} steps ·{" "}
+              {result.links.length} links
             </span>
+            <Select value={metric} onValueChange={(v) => setMetric(v as Metric)}>
+              <SelectTrigger className="h-8 w-44 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="depth">Node depth</SelectItem>
+                <SelectItem value="inflow">Node inflow</SelectItem>
+                <SelectItem value="linkflow">Link flow (hydrograph)</SelectItem>
+              </SelectContent>
+            </Select>
             <Button variant="outline" size="sm" onClick={downloadRpt}>
               Download .rpt
             </Button>
@@ -128,7 +167,7 @@ export function EngineRunner({ built }: Props) {
                       fontSize={11}
                     />
                     <YAxis
-                      label={{ value: "depth", angle: -90, position: "insideLeft" }}
+                      label={{ value: chartData.yLabel, angle: -90, position: "insideLeft" }}
                       stroke="hsl(var(--muted-foreground))"
                       fontSize={11}
                     />
@@ -140,12 +179,12 @@ export function EngineRunner({ built }: Props) {
                       }}
                     />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
-                    {chartData.keys.map((n, i) => (
+                    {chartData.keys.map((k, i) => (
                       <Line
-                        key={n}
+                        key={k}
                         type="monotone"
-                        dataKey={"n" + n}
-                        name={`node ${n}`}
+                        dataKey={k}
+                        name={chartData.labels?.[i] ?? k}
                         stroke={palette[i % palette.length]}
                         dot={false}
                         strokeWidth={2}
