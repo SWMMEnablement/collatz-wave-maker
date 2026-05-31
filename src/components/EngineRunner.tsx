@@ -111,8 +111,19 @@ export function EngineRunner({ built }: Props) {
           <>
             <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
               engine: <span className="text-primary">{result.engine}</span> ·{" "}
-              {result.durationMs.toFixed(0)} ms
+              {result.durationMs.toFixed(0)} ms · {result.times.length} steps ·{" "}
+              {result.links.length} links
             </span>
+            <Select value={metric} onValueChange={(v) => setMetric(v as Metric)}>
+              <SelectTrigger className="h-8 w-44 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="depth">Node depth</SelectItem>
+                <SelectItem value="inflow">Node inflow</SelectItem>
+                <SelectItem value="linkflow">Link flow (hydrograph)</SelectItem>
+              </SelectContent>
+            </Select>
             <Button variant="outline" size="sm" onClick={downloadRpt}>
               Download .rpt
             </Button>
