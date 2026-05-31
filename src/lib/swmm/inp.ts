@@ -55,7 +55,7 @@ export function buildInp(opts: InpOptions): BuildResult {
   push("[OPTIONS]");
   push(`FLOW_UNITS           ${opts.flowUnits}`);
   push("INFILTRATION         HORTON");
-  push("FLOW_ROUTING         KINWAVE");
+  push("FLOW_ROUTING         DYNWAVE");
   push("LINK_OFFSETS         DEPTH");
   push("MIN_SLOPE            0");
   push("ALLOW_PONDING        NO");
