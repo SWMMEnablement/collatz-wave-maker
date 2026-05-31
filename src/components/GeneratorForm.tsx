@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { InpOptions } from "@/lib/swmm/inp";
+import { LAYOUT_OPTIONS } from "@/lib/swmm/layout";
 
 interface Props {
   value: InpOptions;
@@ -60,9 +61,10 @@ export function GeneratorForm({ value, onChange }: Props) {
           onValueChange={(v) => set("layoutMode", v as InpOptions["layoutMode"])}
         >
           <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="symmetric">Symmetric bloom</SelectItem>
-            <SelectItem value="radial">Radial rings</SelectItem>
+          <SelectContent className="max-h-72">
+            {LAYOUT_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
