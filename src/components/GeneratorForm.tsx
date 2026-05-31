@@ -74,6 +74,8 @@ export function GeneratorForm({ value, onChange }: Props) {
         <Field label="Conduit length"><Input type="number" value={value.conduitLength} onChange={num("conduitLength")} /></Field>
         <Field label="Roughness (n)"><Input type="number" step="0.001" value={value.roughness} onChange={num("roughness")} /></Field>
         <Field label="Diameter"><Input type="number" step="0.1" value={value.diameter} onChange={num("diameter")} /></Field>
+        <Field label="DWF baseflow / node"><Input type="number" step="0.01" value={value.dwfBaseflow} onChange={num("dwfBaseflow")} /></Field>
+        <Field label="DWF pattern (opt.)"><Input type="text" value={value.dwfPattern} onChange={(e) => set("dwfPattern", e.target.value)} /></Field>
       </div>
     </div>
   );

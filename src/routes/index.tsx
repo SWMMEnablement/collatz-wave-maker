@@ -5,6 +5,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { GeneratorForm } from "@/components/GeneratorForm";
 import { InpPreview } from "@/components/InpPreview";
 import { HolyTreeCanvas } from "@/components/HolyTreeCanvas";
+import { HglView } from "@/components/HglView";
 import { buildInp, defaultOptions, type InpOptions } from "@/lib/swmm/inp";
 
 export const Route = createFileRoute("/")({
@@ -73,11 +74,17 @@ function Page() {
             <Tabs defaultValue="visual">
               <TabsList>
                 <TabsTrigger value="visual">Visual</TabsTrigger>
+                <TabsTrigger value="hgl">HGL</TabsTrigger>
                 <TabsTrigger value="inp">INP text</TabsTrigger>
               </TabsList>
               <TabsContent value="visual" className="mt-3">
                 <div className="h-[75vh] min-h-[520px]">
                   <HolyTreeCanvas tree={built.tree} coords={built.coords} />
+                </div>
+              </TabsContent>
+              <TabsContent value="hgl" className="mt-3">
+                <div className="h-[75vh] min-h-[520px]">
+                  <HglView tree={built.tree} inverts={built.inverts} opts={opts} />
                 </div>
               </TabsContent>
               <TabsContent value="inp" className="mt-3">
