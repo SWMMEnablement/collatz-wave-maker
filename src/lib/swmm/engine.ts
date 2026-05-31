@@ -279,8 +279,8 @@ function runStub(built: BuildResult, inp: string): EngineResult {
 }
 
 export async function runEngine(built: BuildResult): Promise<EngineResult> {
-  const real = await runWasm(built.inp);
-  if (real && real.engine === "wasm" && real.rpt && !real.log.includes("error")) {
+  const real = await runWasm(built);
+  if (real && real.engine === "wasm" && real.rpt) {
     return real;
   }
   return runStub(built, built.inp);
