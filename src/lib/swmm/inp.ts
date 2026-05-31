@@ -128,6 +128,20 @@ export function buildInp(opts: InpOptions): BuildResult {
   }
   push();
 
+  push("[DWF]");
+  push(";;Node           Constituent      Baseline   Patterns");
+  for (const n of tree.nodes) {
+    if (n === 1) continue;
+    const pat = opts.dwfPattern.trim();
+    push(
+      `${pad(n, 17)}${pad("FLOW", 17)}${pad(
+        opts.dwfBaseflow.toFixed(4),
+        11,
+      )}${pat ? `"${pat}"` : ""}`,
+    );
+  }
+  push();
+
   push("[REPORT]");
   push("INPUT      NO");
   push("CONTROLS   NO");
@@ -148,11 +162,15 @@ export function buildInp(opts: InpOptions): BuildResult {
   push(";;Link           X-Coord            Y-Coord");
   push();
 
+  const inverts = new Map<number, number>();
+  for (const n of tree.nodes) inverts.set(n, invertOf(n));
+
   return {
     inp: lines.join("\n"),
     nodeCount: tree.nodes.size,
     conduitCount: cid,
     tree,
     coords,
+    inverts,
   };
 }
