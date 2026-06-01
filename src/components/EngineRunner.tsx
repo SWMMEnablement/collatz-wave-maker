@@ -145,6 +145,7 @@ export function EngineRunner({ built }: Props) {
                 <SelectItem value="depth">Node depth</SelectItem>
                 <SelectItem value="inflow">Node inflow</SelectItem>
                 <SelectItem value="linkflow">Link flow (hydrograph)</SelectItem>
+                <SelectItem value="system">System (totals)</SelectItem>
               </SelectContent>
             </Select>
             <Button variant="outline" size="sm" onClick={downloadRpt}>
