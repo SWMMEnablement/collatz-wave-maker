@@ -31,6 +31,7 @@ export const Route = createFileRoute("/")({
 
 function Page() {
   const [opts, setOpts] = useState<InpOptions>(defaultOptions);
+  const [selectedNodes, setSelectedNodes] = useState<Set<number> | null>(null);
   const built = useMemo(() => buildInp(opts), [opts]);
 
   const download = () => {
