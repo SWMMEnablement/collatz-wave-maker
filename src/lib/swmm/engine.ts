@@ -337,12 +337,30 @@ function runStub(built: BuildResult, inp: string): EngineResult {
   lines.push("        exporting swmm_run(inp, rpt, out) to switch automatically.");
   lines.push(`  Used ${tree.nodes.size} nodes, peak at root accumulates ${totalUp} contributors.`);
 
+  // synthesize system series
+  const N = times.length;
+  const sumInflow = new Array(N).fill(0);
+  for (const s of series) for (let i = 0; i < N; i++) sumInflow[i] += s.inflow[i] ?? 0;
+  const rootLink = links.find((l) => l.to === 1);
+  const outflow = rootLink ? rootLink.flow.slice() : new Array(N).fill(0);
+  const storage = sumInflow.map((q, i) => Math.max(0, q - (outflow[i] ?? 0)));
+  const system: SystemSeries = {
+    totalInflow: sumInflow,
+    flooding: new Array(N).fill(0),
+    outflow,
+    storage,
+    runoff: new Array(N).fill(0),
+    dwflow: sumInflow.map((q) => +(q * 0.1).toFixed(4)),
+    rainfall: new Array(N).fill(0),
+  };
+
   return {
     rpt: lines.join("\n"),
     out: null,
     times,
     series,
     links,
+    system,
     engine: "stub",
     log: `stub run completed in ${(performance.now() - t0).toFixed(1)}ms`,
     durationMs: performance.now() - t0,
