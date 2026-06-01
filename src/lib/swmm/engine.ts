@@ -149,6 +149,10 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
     const times: number[] = [];
     const series: NodeSeries[] = [];
     const links: LinkSeries[] = [];
+    let system: SystemSeries = {
+      totalInflow: [], flooding: [], outflow: [], storage: [],
+      runoff: [], dwflow: [], rainfall: [],
+    };
     try {
       out = mod.FS.readFile("/output.out") as Uint8Array;
       const parsed = parseSwmmOut(out);
@@ -181,6 +185,18 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
             flow: Array.from(parsed.linkFlow[i]),
           });
         }
+        // system: 0 airTemp, 1 rainfall, 2 snowDepth, 3 infil, 4 runoff,
+        // 5 dwflow, 6 gwflow, 7 iiflow, 8 extflow, 9 totalInflow,
+        // 10 flooding, 11 outflow, 12 storage, 13 evap, 14 ptlEvap
+        system = {
+          rainfall: Array.from(parsed.sysVars[1]),
+          runoff: Array.from(parsed.sysVars[4]),
+          dwflow: Array.from(parsed.sysVars[5]),
+          totalInflow: Array.from(parsed.sysVars[9]),
+          flooding: Array.from(parsed.sysVars[10]),
+          outflow: Array.from(parsed.sysVars[11]),
+          storage: Array.from(parsed.sysVars[12]),
+        };
       } else {
         log.push("parse .out failed (magic / layout mismatch)");
       }
@@ -196,6 +212,7 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
       times,
       series,
       links,
+      system,
       engine: "wasm",
       log: log.join("\n"),
       durationMs: performance.now() - t0,
@@ -208,6 +225,10 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
       times: [],
       series: [],
       links: [],
+      system: {
+        totalInflow: [], flooding: [], outflow: [], storage: [],
+        runoff: [], dwflow: [], rainfall: [],
+      },
       engine: "wasm",
       log: log.join("\n"),
       durationMs: performance.now() - t0,
