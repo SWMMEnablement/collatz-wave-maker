@@ -132,5 +132,6 @@ export function parseSwmmOut(buf: Uint8Array): ParsedOut | null {
     nodeDepth,
     nodeTotalInflow,
     linkFlow,
+    sysVars,
   };
 }
