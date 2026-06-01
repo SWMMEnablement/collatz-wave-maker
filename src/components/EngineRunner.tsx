@@ -192,7 +192,15 @@ export function EngineRunner({ built, selectedNodes }: Props) {
           </TabsList>
 
           <TabsContent value="graphics" className="mt-3 flex-1">
-            {chartData.rows.length === 0 ? (
+            {!selectedNodes || selectedNodes.size === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+                <p>Select an area on the diagram to view graphs.</p>
+                <p className="text-xs">
+                  Shift-drag on the canvas, or click{" "}
+                  <span className="font-mono text-primary">select area</span> then drag.
+                </p>
+              </div>
+            ) : chartData.rows.length === 0 ? (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                 No time series in result (real wasm reported summary only).
               </div>
