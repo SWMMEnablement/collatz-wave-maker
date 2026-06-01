@@ -8,8 +8,10 @@ interface Props {
   onSelectionChange?: (nodes: Set<number> | null) => void;
 }
 
-export function HolyTreeCanvas({ tree, coords }: Props) {
+export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange }: Props) {
   const [hover, setHover] = useState<number | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
   const base = useMemo(() => {
