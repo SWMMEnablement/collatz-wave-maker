@@ -99,6 +99,9 @@ export function GeneratorForm({ value, onChange }: Props) {
       <Field label="Peak inflow / node">
         <Input type="number" step="0.1" value={value.peakInflow} onChange={num("peakInflow")} />
       </Field>
+      <Field label="Coordinate scale">
+        <Input type="number" step="0.01" value={value.coordScale} onChange={num("coordScale")} />
+      </Field>
 
       <div className="grid grid-cols-2 gap-4">
         <Field label="Base invert"><Input type="number" value={value.baseInvert} onChange={num("baseInvert")} /></Field>
