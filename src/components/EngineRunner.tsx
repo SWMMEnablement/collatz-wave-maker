@@ -157,13 +157,19 @@ export function EngineRunner({ built }: Props) {
       </div>
 
       {!result ? (
-        <div className="flex flex-1 items-center justify-center rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          Click <span className="mx-1 font-mono text-primary">Run SWMM5</span> to
-          execute the engine on the generated .inp. If a real{" "}
-          <code className="font-mono">/wasm/swmm5.js</code> +{" "}
-          <code className="font-mono">/wasm/swmm5.wasm</code> is present it will
-          be used; otherwise a stub engine produces a synthetic report and time
-          series so the UI is fully functional.
+        <div className="flex flex-1 items-center justify-center rounded-md border border-dashed border-border p-8">
+          <div className="max-w-md space-y-2 text-center text-sm leading-relaxed text-muted-foreground">
+            <p>
+              Click <span className="font-mono text-primary">Run SWMM5</span> to
+              execute the engine on the generated .inp.
+            </p>
+            <p className="text-xs">
+              Uses the real wasm at{" "}
+              <code className="font-mono">/wasm/swmm5.js</code> when present,
+              otherwise falls back to a stub engine that produces a synthetic
+              report and time series.
+            </p>
+          </div>
         </div>
       ) : (
         <Tabs defaultValue="graphics" className="flex flex-1 flex-col">
