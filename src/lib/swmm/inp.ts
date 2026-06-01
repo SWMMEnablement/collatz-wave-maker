@@ -13,7 +13,8 @@ export interface InpOptions {
   layoutMode: LayoutMode;
   dwfBaseflow: number; // user-defined DWF average flow at each junction
   dwfPattern: string;  // optional pattern name ("" = none)
-  endTimeSec: number;  // simulation duration in seconds
+  endTimeSec: number;  // simulation duration in seconds (min 12 h = 43200)
+  peakInflow: number;  // peak of trapezoidal inflow hydrograph at each junction
 }
 
 export const defaultOptions: InpOptions = {
