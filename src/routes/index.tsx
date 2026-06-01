@@ -31,6 +31,7 @@ export const Route = createFileRoute("/")({
 
 function Page() {
   const [opts, setOpts] = useState<InpOptions>(defaultOptions);
+  const [selectedNodes, setSelectedNodes] = useState<Set<number> | null>(null);
   const built = useMemo(() => buildInp(opts), [opts]);
 
   const download = () => {
@@ -90,7 +91,12 @@ function Page() {
               </TabsList>
               <TabsContent value="visual" className="mt-3">
                 <div className="h-[75vh] min-h-[520px]">
-                  <HolyTreeCanvas tree={built.tree} coords={built.coords} />
+                  <HolyTreeCanvas
+                    tree={built.tree}
+                    coords={built.coords}
+                    selectedNodes={selectedNodes}
+                    onSelectionChange={setSelectedNodes}
+                  />
                 </div>
               </TabsContent>
               <TabsContent value="hgl" className="mt-3">
@@ -109,7 +115,7 @@ function Page() {
               </TabsContent>
               <TabsContent value="engine" className="mt-3">
                 <div className="h-[75vh] min-h-[520px]">
-                  <EngineRunner built={built} />
+                  <EngineRunner built={built} selectedNodes={selectedNodes} />
                 </div>
               </TabsContent>
               <TabsContent value="docs" className="mt-3">

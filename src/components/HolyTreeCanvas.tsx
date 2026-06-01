@@ -4,10 +4,14 @@ import type { CollatzTree } from "@/lib/collatz";
 interface Props {
   tree: CollatzTree;
   coords: Map<number, [number, number]>;
+  selectedNodes?: Set<number> | null;
+  onSelectionChange?: (nodes: Set<number> | null) => void;
 }
 
-export function HolyTreeCanvas({ tree, coords }: Props) {
+export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange }: Props) {
   const [hover, setHover] = useState<number | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
   const base = useMemo(() => {
@@ -93,11 +97,39 @@ export function HolyTreeCanvas({ tree, coords }: Props) {
   }, [base.w, base.h]);
 
   const dragRef = useRef<{ x: number; y: number; cx: number; cy: number } | null>(null);
+  const selectRef = useRef<{ sx: number; sy: number } | null>(null);
+
+  const clientToSvg = (cx: number, cy: number) => {
+    const svg = svgRef.current;
+    if (!svg) return { x: 0, y: 0 };
+    const rect = svg.getBoundingClientRect();
+    const px = (cx - rect.left) / rect.width;
+    const py = (cy - rect.top) / rect.height;
+    return { x: vbX + px * vbW, y: vbY + py * vbH };
+  };
+
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     (e.target as Element).setPointerCapture?.(e.pointerId);
+    if (selectMode || e.shiftKey) {
+      const p = clientToSvg(e.clientX, e.clientY);
+      selectRef.current = { sx: p.x, sy: p.y };
+      setMarquee({ x: p.x, y: p.y, w: 0, h: 0 });
+      return;
+    }
     dragRef.current = { x: e.clientX, y: e.clientY, cx: view.cx, cy: view.cy };
   };
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (selectRef.current) {
+      const p = clientToSvg(e.clientX, e.clientY);
+      const s = selectRef.current;
+      setMarquee({
+        x: Math.min(s.sx, p.x),
+        y: Math.min(s.sy, p.y),
+        w: Math.abs(p.x - s.sx),
+        h: Math.abs(p.y - s.sy),
+      });
+      return;
+    }
     const d = dragRef.current;
     if (!d) return;
     const svg = svgRef.current;
@@ -108,6 +140,21 @@ export function HolyTreeCanvas({ tree, coords }: Props) {
     setView((v) => ({ ...v, cx: d.cx - dx, cy: d.cy - dy }));
   };
   const onPointerUp = () => {
+    if (selectRef.current && marquee) {
+      const m = marquee;
+      if (m.w > 1 && m.h > 1) {
+        const picked = new Set<number>();
+        for (const [n, [x, y]] of coords) {
+          if (x >= m.x && x <= m.x + m.w && y >= m.y && y <= m.y + m.h) picked.add(n);
+        }
+        onSelectionChange?.(picked.size > 0 ? picked : null);
+      }
+      selectRef.current = null;
+      setMarquee(null);
+      setSelectMode(false);
+      dragRef.current = null;
+      return;
+    }
     dragRef.current = null;
   };
 
@@ -130,7 +177,7 @@ export function HolyTreeCanvas({ tree, coords }: Props) {
         ref={svgRef}
         viewBox={viewBox}
         preserveAspectRatio="xMidYMid meet"
-        className="h-full w-full touch-none select-none cursor-grab active:cursor-grabbing"
+        className={`h-full w-full touch-none select-none ${selectMode ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"}`}
         onWheel={onWheel}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -184,6 +231,7 @@ export function HolyTreeCanvas({ tree, coords }: Props) {
           {Array.from(tree.nodes).map((n) => {
             const p = coords.get(n);
             if (!p) return null;
+            const isSel = selectedNodes?.has(n) ?? false;
             if (n === 1) {
               return (
                 <circle
@@ -192,8 +240,8 @@ export function HolyTreeCanvas({ tree, coords }: Props) {
                   cy={p[1]}
                   r={10}
                   fill="oklch(0.82 0.18 65)"
-                  stroke="oklch(0.95 0.05 65)"
-                  strokeWidth={1.2}
+                  stroke={isSel ? "#7dd3fc" : "oklch(0.95 0.05 65)"}
+                  strokeWidth={isSel ? 2.5 : 1.2}
                   filter="url(#glow)"
                   onMouseEnter={() => setHover(n)}
                   onMouseLeave={() => setHover(null)}
@@ -209,12 +257,12 @@ export function HolyTreeCanvas({ tree, coords }: Props) {
                 key={n}
                 cx={+p[0].toFixed(2)}
                 cy={+p[1].toFixed(2)}
-                r={+r.toFixed(2)}
-                fill={fill}
-                fillOpacity={+(0.95 - t * 0.25).toFixed(3)}
-                stroke="hsl(280, 100%, 85%)"
-                strokeOpacity={+(0.4 - t * 0.25).toFixed(3)}
-                strokeWidth={0.4}
+                r={isSel ? +(r + 1.5).toFixed(2) : +r.toFixed(2)}
+                fill={isSel ? "#7dd3fc" : fill}
+                fillOpacity={isSel ? 1 : +(0.95 - t * 0.25).toFixed(3)}
+                stroke={isSel ? "#7dd3fc" : "hsl(280, 100%, 85%)"}
+                strokeOpacity={isSel ? 1 : +(0.4 - t * 0.25).toFixed(3)}
+                strokeWidth={isSel ? 1 : 0.4}
                 filter="url(#glow)"
                 onMouseEnter={() => setHover(n)}
                 onMouseLeave={() => setHover(null)}
@@ -222,6 +270,21 @@ export function HolyTreeCanvas({ tree, coords }: Props) {
             );
           })}
         </g>
+
+        {marquee && (
+          <rect
+            x={marquee.x}
+            y={marquee.y}
+            width={marquee.w}
+            height={marquee.h}
+            fill="#7dd3fc"
+            fillOpacity={0.1}
+            stroke="#7dd3fc"
+            strokeWidth={1}
+            strokeDasharray="4 3"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
       </svg>
 
       <div className="pointer-events-none absolute left-3 top-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -252,6 +315,29 @@ export function HolyTreeCanvas({ tree, coords }: Props) {
           fit
         </button>
       </div>
+
+      {/* Selection controls */}
+      {onSelectionChange && (
+        <div className="absolute bottom-3 left-3 flex items-center gap-2">
+          <button
+            onClick={() => setSelectMode((s) => !s)}
+            className={`h-8 rounded border border-border px-2 font-mono text-[10px] uppercase tracking-wider backdrop-blur hover:bg-background ${
+              selectMode ? "bg-primary text-primary-foreground" : "bg-background/70 text-foreground"
+            }`}
+            title="Drag a box on the diagram to pick nodes (or shift-drag)"
+          >
+            {selectMode ? "drag to select…" : "select area"}
+          </button>
+          {selectedNodes && selectedNodes.size > 0 && (
+            <button
+              onClick={() => onSelectionChange(null)}
+              className="h-8 rounded border border-border bg-background/70 px-2 font-mono text-[10px] uppercase tracking-wider text-foreground backdrop-blur hover:bg-background"
+            >
+              clear ({selectedNodes.size})
+            </button>
+          )}
+        </div>
+      )}
 
       {hover != null && (
         <div className="pointer-events-none absolute right-3 top-3 rounded border border-border bg-background/80 px-2 py-1 font-mono text-xs text-foreground backdrop-blur">

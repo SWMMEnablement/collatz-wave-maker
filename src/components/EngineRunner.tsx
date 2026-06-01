@@ -23,11 +23,12 @@ import type { BuildResult } from "@/lib/swmm/inp";
 
 interface Props {
   built: BuildResult;
+  selectedNodes?: Set<number> | null;
 }
 
 type Metric = "depth" | "inflow" | "linkflow" | "system";
 
-export function EngineRunner({ built }: Props) {
+export function EngineRunner({ built, selectedNodes }: Props) {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<EngineResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -63,7 +64,10 @@ export function EngineRunner({ built }: Props) {
       return { rows: [] as Record<string, number>[], keys: [] as string[], labels: [] as string[], yLabel: "" };
     let entries: { key: string; label: string; values: number[] }[] = [];
     if (metric === "linkflow") {
-      entries = [...result.links]
+      const linkList = selectedNodes && selectedNodes.size > 0
+        ? result.links.filter((l) => selectedNodes.has(l.from) || selectedNodes.has(l.to))
+        : result.links;
+      entries = [...linkList]
         .map((l) => ({
           key: l.id,
           label: `${l.id} (${l.from}→${l.to})`,
@@ -91,7 +95,10 @@ export function EngineRunner({ built }: Props) {
     } else {
       const get = (s: { depth: number[]; inflow: number[] }) =>
         metric === "depth" ? s.depth : s.inflow;
-      entries = [...result.series]
+      const nodeList = selectedNodes && selectedNodes.size > 0
+        ? result.series.filter((s) => selectedNodes.has(s.node))
+        : result.series;
+      entries = [...nodeList]
         .map((s) => ({
           key: "n" + s.node,
           label: `node ${s.node}`,
@@ -151,6 +158,11 @@ export function EngineRunner({ built }: Props) {
             <Button variant="outline" size="sm" onClick={downloadRpt}>
               Download .rpt
             </Button>
+            {selectedNodes && selectedNodes.size > 0 && (
+              <span className="rounded border border-primary/40 bg-primary/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-primary">
+                filtered: {selectedNodes.size} node{selectedNodes.size === 1 ? "" : "s"} selected on diagram
+              </span>
+            )}
           </>
         )}
         {err && <span className="text-xs text-destructive">{err}</span>}
