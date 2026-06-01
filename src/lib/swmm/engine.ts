@@ -18,12 +18,23 @@ export interface LinkSeries {
   flow: number[];
 }
 
+export interface SystemSeries {
+  totalInflow: number[];
+  flooding: number[];
+  outflow: number[];
+  storage: number[];
+  runoff: number[];
+  dwflow: number[];
+  rainfall: number[];
+}
+
 export interface EngineResult {
   rpt: string;
   out: Uint8Array | null;
   times: number[]; // minutes
   series: NodeSeries[];
   links: LinkSeries[];
+  system: SystemSeries;
   engine: "wasm" | "stub";
   log: string;
   durationMs: number;
