@@ -231,6 +231,7 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange 
           {Array.from(tree.nodes).map((n) => {
             const p = coords.get(n);
             if (!p) return null;
+            const isSel = selectedNodes?.has(n) ?? false;
             if (n === 1) {
               return (
                 <circle
@@ -239,8 +240,8 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange 
                   cy={p[1]}
                   r={10}
                   fill="oklch(0.82 0.18 65)"
-                  stroke="oklch(0.95 0.05 65)"
-                  strokeWidth={1.2}
+                  stroke={isSel ? "#7dd3fc" : "oklch(0.95 0.05 65)"}
+                  strokeWidth={isSel ? 2.5 : 1.2}
                   filter="url(#glow)"
                   onMouseEnter={() => setHover(n)}
                   onMouseLeave={() => setHover(null)}
@@ -256,12 +257,12 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange 
                 key={n}
                 cx={+p[0].toFixed(2)}
                 cy={+p[1].toFixed(2)}
-                r={+r.toFixed(2)}
-                fill={fill}
-                fillOpacity={+(0.95 - t * 0.25).toFixed(3)}
-                stroke="hsl(280, 100%, 85%)"
-                strokeOpacity={+(0.4 - t * 0.25).toFixed(3)}
-                strokeWidth={0.4}
+                r={isSel ? +(r + 1.5).toFixed(2) : +r.toFixed(2)}
+                fill={isSel ? "#7dd3fc" : fill}
+                fillOpacity={isSel ? 1 : +(0.95 - t * 0.25).toFixed(3)}
+                stroke={isSel ? "#7dd3fc" : "hsl(280, 100%, 85%)"}
+                strokeOpacity={isSel ? 1 : +(0.4 - t * 0.25).toFixed(3)}
+                strokeWidth={isSel ? 1 : 0.4}
                 filter="url(#glow)"
                 onMouseEnter={() => setHover(n)}
                 onMouseLeave={() => setHover(null)}
@@ -269,6 +270,21 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange 
             );
           })}
         </g>
+
+        {marquee && (
+          <rect
+            x={marquee.x}
+            y={marquee.y}
+            width={marquee.w}
+            height={marquee.h}
+            fill="#7dd3fc"
+            fillOpacity={0.1}
+            stroke="#7dd3fc"
+            strokeWidth={1}
+            strokeDasharray="4 3"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
       </svg>
 
       <div className="pointer-events-none absolute left-3 top-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
