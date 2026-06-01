@@ -97,11 +97,39 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange 
   }, [base.w, base.h]);
 
   const dragRef = useRef<{ x: number; y: number; cx: number; cy: number } | null>(null);
+  const selectRef = useRef<{ sx: number; sy: number } | null>(null);
+
+  const clientToSvg = (cx: number, cy: number) => {
+    const svg = svgRef.current;
+    if (!svg) return { x: 0, y: 0 };
+    const rect = svg.getBoundingClientRect();
+    const px = (cx - rect.left) / rect.width;
+    const py = (cy - rect.top) / rect.height;
+    return { x: vbX + px * vbW, y: vbY + py * vbH };
+  };
+
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     (e.target as Element).setPointerCapture?.(e.pointerId);
+    if (selectMode || e.shiftKey) {
+      const p = clientToSvg(e.clientX, e.clientY);
+      selectRef.current = { sx: p.x, sy: p.y };
+      setMarquee({ x: p.x, y: p.y, w: 0, h: 0 });
+      return;
+    }
     dragRef.current = { x: e.clientX, y: e.clientY, cx: view.cx, cy: view.cy };
   };
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (selectRef.current) {
+      const p = clientToSvg(e.clientX, e.clientY);
+      const s = selectRef.current;
+      setMarquee({
+        x: Math.min(s.sx, p.x),
+        y: Math.min(s.sy, p.y),
+        w: Math.abs(p.x - s.sx),
+        h: Math.abs(p.y - s.sy),
+      });
+      return;
+    }
     const d = dragRef.current;
     if (!d) return;
     const svg = svgRef.current;
@@ -112,6 +140,21 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange 
     setView((v) => ({ ...v, cx: d.cx - dx, cy: d.cy - dy }));
   };
   const onPointerUp = () => {
+    if (selectRef.current && marquee) {
+      const m = marquee;
+      if (m.w > 1 && m.h > 1) {
+        const picked = new Set<number>();
+        for (const [n, [x, y]] of coords) {
+          if (x >= m.x && x <= m.x + m.w && y >= m.y && y <= m.y + m.h) picked.add(n);
+        }
+        onSelectionChange?.(picked.size > 0 ? picked : null);
+      }
+      selectRef.current = null;
+      setMarquee(null);
+      setSelectMode(false);
+      dragRef.current = null;
+      return;
+    }
     dragRef.current = null;
   };
 
