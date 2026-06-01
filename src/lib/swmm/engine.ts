@@ -18,12 +18,23 @@ export interface LinkSeries {
   flow: number[];
 }
 
+export interface SystemSeries {
+  totalInflow: number[];
+  flooding: number[];
+  outflow: number[];
+  storage: number[];
+  runoff: number[];
+  dwflow: number[];
+  rainfall: number[];
+}
+
 export interface EngineResult {
   rpt: string;
   out: Uint8Array | null;
   times: number[]; // minutes
   series: NodeSeries[];
   links: LinkSeries[];
+  system: SystemSeries;
   engine: "wasm" | "stub";
   log: string;
   durationMs: number;
@@ -138,6 +149,10 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
     const times: number[] = [];
     const series: NodeSeries[] = [];
     const links: LinkSeries[] = [];
+    let system: SystemSeries = {
+      totalInflow: [], flooding: [], outflow: [], storage: [],
+      runoff: [], dwflow: [], rainfall: [],
+    };
     try {
       out = mod.FS.readFile("/output.out") as Uint8Array;
       const parsed = parseSwmmOut(out);
@@ -170,6 +185,18 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
             flow: Array.from(parsed.linkFlow[i]),
           });
         }
+        // system: 0 airTemp, 1 rainfall, 2 snowDepth, 3 infil, 4 runoff,
+        // 5 dwflow, 6 gwflow, 7 iiflow, 8 extflow, 9 totalInflow,
+        // 10 flooding, 11 outflow, 12 storage, 13 evap, 14 ptlEvap
+        system = {
+          rainfall: Array.from(parsed.sysVars[1]),
+          runoff: Array.from(parsed.sysVars[4]),
+          dwflow: Array.from(parsed.sysVars[5]),
+          totalInflow: Array.from(parsed.sysVars[9]),
+          flooding: Array.from(parsed.sysVars[10]),
+          outflow: Array.from(parsed.sysVars[11]),
+          storage: Array.from(parsed.sysVars[12]),
+        };
       } else {
         log.push("parse .out failed (magic / layout mismatch)");
       }
@@ -185,6 +212,7 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
       times,
       series,
       links,
+      system,
       engine: "wasm",
       log: log.join("\n"),
       durationMs: performance.now() - t0,
@@ -197,6 +225,10 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
       times: [],
       series: [],
       links: [],
+      system: {
+        totalInflow: [], flooding: [], outflow: [], storage: [],
+        runoff: [], dwflow: [], rainfall: [],
+      },
       engine: "wasm",
       log: log.join("\n"),
       durationMs: performance.now() - t0,
@@ -305,12 +337,30 @@ function runStub(built: BuildResult, inp: string): EngineResult {
   lines.push("        exporting swmm_run(inp, rpt, out) to switch automatically.");
   lines.push(`  Used ${tree.nodes.size} nodes, peak at root accumulates ${totalUp} contributors.`);
 
+  // synthesize system series
+  const Nt = times.length;
+  const sumInflow = new Array(Nt).fill(0);
+  for (const s of series) for (let i = 0; i < Nt; i++) sumInflow[i] += s.inflow[i] ?? 0;
+  const rootLink = links.find((l) => l.to === 1);
+  const outflow = rootLink ? rootLink.flow.slice() : new Array(Nt).fill(0);
+  const storage = sumInflow.map((q, i) => Math.max(0, q - (outflow[i] ?? 0)));
+  const system: SystemSeries = {
+    totalInflow: sumInflow,
+    flooding: new Array(Nt).fill(0),
+    outflow,
+    storage,
+    runoff: new Array(Nt).fill(0),
+    dwflow: sumInflow.map((q) => +(q * 0.1).toFixed(4)),
+    rainfall: new Array(Nt).fill(0),
+  };
+
   return {
     rpt: lines.join("\n"),
     out: null,
     times,
     series,
     links,
+    system,
     engine: "stub",
     log: `stub run completed in ${(performance.now() - t0).toFixed(1)}ms`,
     durationMs: performance.now() - t0,
