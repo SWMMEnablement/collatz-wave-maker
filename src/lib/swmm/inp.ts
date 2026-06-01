@@ -15,6 +15,7 @@ export interface InpOptions {
   dwfPattern: string;  // optional pattern name ("" = none)
   endTimeSec: number;  // simulation duration in seconds (min 12 h = 43200)
   peakInflow: number;  // peak of trapezoidal inflow hydrograph at each junction
+  coordScale: number;  // multiplier for all node coordinates
 }
 
 export const defaultOptions: InpOptions = {
@@ -27,10 +28,11 @@ export const defaultOptions: InpOptions = {
   roughness: 0.013,
   diameter: 1.0,
   layoutMode: "symmetric",
-  dwfBaseflow: 0.1,
+  dwfBaseflow: 0,
   dwfPattern: "",
   endTimeSec: 43200, // 12 hours
   peakInflow: 1.0,
+  coordScale: 0.05,
 };
 
 function secsToHMS(s: number): string {
@@ -56,7 +58,11 @@ const pad = (s: string | number, w: number) => String(s).padEnd(w);
 
 export function buildInp(opts: InpOptions): BuildResult {
   const tree = buildTree(opts.maxSeed);
-  const coords = layoutFor(tree, opts.layoutMode);
+  const rawCoords = layoutFor(tree, opts.layoutMode);
+  const coords = new Map<number, [number, number]>();
+  for (const [n, [x, y]] of rawCoords) {
+    coords.set(n, [x * opts.coordScale, y * opts.coordScale]);
+  }
 
   const lines: string[] = [];
   const push = (s = "") => lines.push(s);
