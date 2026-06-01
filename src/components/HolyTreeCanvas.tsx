@@ -316,6 +316,29 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange 
         </button>
       </div>
 
+      {/* Selection controls */}
+      {onSelectionChange && (
+        <div className="absolute bottom-3 left-3 flex items-center gap-2">
+          <button
+            onClick={() => setSelectMode((s) => !s)}
+            className={`h-8 rounded border border-border px-2 font-mono text-[10px] uppercase tracking-wider backdrop-blur hover:bg-background ${
+              selectMode ? "bg-primary text-primary-foreground" : "bg-background/70 text-foreground"
+            }`}
+            title="Drag a box on the diagram to pick nodes (or shift-drag)"
+          >
+            {selectMode ? "drag to select…" : "select area"}
+          </button>
+          {selectedNodes && selectedNodes.size > 0 && (
+            <button
+              onClick={() => onSelectionChange(null)}
+              className="h-8 rounded border border-border bg-background/70 px-2 font-mono text-[10px] uppercase tracking-wider text-foreground backdrop-blur hover:bg-background"
+            >
+              clear ({selectedNodes.size})
+            </button>
+          )}
+        </div>
+      )}
+
       {hover != null && (
         <div className="pointer-events-none absolute right-3 top-3 rounded border border-border bg-background/80 px-2 py-1 font-mono text-xs text-foreground backdrop-blur">
           n = <span className="text-primary">{hover}</span> · depth{" "}
