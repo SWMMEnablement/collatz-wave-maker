@@ -115,7 +115,7 @@ function Page() {
               </TabsContent>
               <TabsContent value="engine" className="mt-3">
                 <div className="h-[75vh] min-h-[520px]">
-                  <EngineRunner built={built} />
+                  <EngineRunner built={built} selectedNodes={selectedNodes} />
                 </div>
               </TabsContent>
               <TabsContent value="docs" className="mt-3">
