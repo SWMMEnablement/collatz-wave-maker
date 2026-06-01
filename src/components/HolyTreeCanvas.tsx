@@ -4,6 +4,8 @@ import type { CollatzTree } from "@/lib/collatz";
 interface Props {
   tree: CollatzTree;
   coords: Map<number, [number, number]>;
+  selectedNodes?: Set<number> | null;
+  onSelectionChange?: (nodes: Set<number> | null) => void;
 }
 
 export function HolyTreeCanvas({ tree, coords }: Props) {
