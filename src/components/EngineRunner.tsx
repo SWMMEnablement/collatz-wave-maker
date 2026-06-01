@@ -201,7 +201,9 @@ export function EngineRunner({ built }: Props) {
                         fontSize: 12,
                       }}
                     />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    {chartData.keys.length <= 12 && (
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                    )}
                     {chartData.keys.map((k, i) => (
                       <Line
                         key={k}
