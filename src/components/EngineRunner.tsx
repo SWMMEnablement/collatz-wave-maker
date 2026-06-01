@@ -95,7 +95,10 @@ export function EngineRunner({ built, selectedNodes }: Props) {
     } else {
       const get = (s: { depth: number[]; inflow: number[] }) =>
         metric === "depth" ? s.depth : s.inflow;
-      entries = [...result.series]
+      const nodeList = selectedNodes && selectedNodes.size > 0
+        ? result.series.filter((s) => selectedNodes.has(s.node))
+        : result.series;
+      entries = [...nodeList]
         .map((s) => ({
           key: "n" + s.node,
           label: `node ${s.node}`,
