@@ -29,7 +29,8 @@ export const defaultOptions: InpOptions = {
   layoutMode: "symmetric",
   dwfBaseflow: 0.1,
   dwfPattern: "",
-  endTimeSec: 21600, // 6 hours
+  endTimeSec: 43200, // 12 hours
+  peakInflow: 1.0,
 };
 
 function secsToHMS(s: number): string {
