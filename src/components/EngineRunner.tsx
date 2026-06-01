@@ -64,7 +64,10 @@ export function EngineRunner({ built, selectedNodes }: Props) {
       return { rows: [] as Record<string, number>[], keys: [] as string[], labels: [] as string[], yLabel: "" };
     let entries: { key: string; label: string; values: number[] }[] = [];
     if (metric === "linkflow") {
-      entries = [...result.links]
+      const linkList = selectedNodes && selectedNodes.size > 0
+        ? result.links.filter((l) => selectedNodes.has(l.from) || selectedNodes.has(l.to))
+        : result.links;
+      entries = [...linkList]
         .map((l) => ({
           key: l.id,
           label: `${l.id} (${l.from}→${l.to})`,
