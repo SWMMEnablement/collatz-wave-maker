@@ -93,6 +93,10 @@ export function parseSwmmOut(buf: Uint8Array): ParsedOut | null {
     { length: Nlink },
     () => new Float32Array(nPeriods),
   );
+  const sysVars: Float32Array[] = Array.from(
+    { length: nSysVars },
+    () => new Float32Array(nPeriods),
+  );
 
   for (let p = 0; p < nPeriods; p++) {
     const base = resultsOffset + p * perPeriod;
@@ -109,6 +113,10 @@ export function parseSwmmOut(buf: Uint8Array): ParsedOut | null {
     for (let l = 0; l < Nlink; l++) {
       const lb = linksBase + l * nLinkVars * 4;
       linkFlow[l][p] = f32(dv, lb); // var 0 = flow
+    }
+    const sysBase = linksBase + 4 * Nlink * nLinkVars;
+    for (let s = 0; s < nSysVars; s++) {
+      sysVars[s][p] = f32(dv, sysBase + s * 4);
     }
   }
 
