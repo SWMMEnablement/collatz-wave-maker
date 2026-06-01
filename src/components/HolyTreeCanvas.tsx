@@ -177,7 +177,7 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange 
         ref={svgRef}
         viewBox={viewBox}
         preserveAspectRatio="xMidYMid meet"
-        className="h-full w-full touch-none select-none cursor-grab active:cursor-grabbing"
+        className={`h-full w-full touch-none select-none ${selectMode ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"}`}
         onWheel={onWheel}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
