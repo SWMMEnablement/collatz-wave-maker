@@ -160,6 +160,46 @@ export function buildInp(opts: InpOptions): BuildResult {
   }
   push();
 
+  // Trapezoidal inflow hydrograph applied at every junction
+  // Breakpoints: (0,0) ramp up to peak at t/4, plateau to 3t/4, ramp down to t.
+  const tsName = "TRAPZ";
+  const endH = opts.endTimeSec / 3600;
+  const peak = opts.peakInflow;
+  const fmtH = (h: number) => {
+    const total = Math.max(0, Math.round(h * 3600));
+    const hh = Math.floor(total / 3600);
+    const mm = Math.floor((total % 3600) / 60);
+    const ss = total % 60;
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${p(hh)}:${p(mm)}:${p(ss)}`;
+  };
+  push("[INFLOWS]");
+  push(";;Node           Constituent      Time Series      Type     Mfactor  Sfactor  Baseline Pattern");
+  for (const n of tree.nodes) {
+    if (n === 1) continue;
+    push(
+      `${pad(n, 17)}${pad("FLOW", 17)}${pad(tsName, 17)}${pad("FLOW", 9)}${pad(
+        "1.0",
+        9,
+      )}${pad("1.0", 9)}`,
+    );
+  }
+  push();
+
+  push("[TIMESERIES]");
+  push(";;Name           Date       Time       Value");
+  const tsRows: Array<[string, number]> = [
+    [fmtH(0), 0],
+    [fmtH(endH * 0.25), peak],
+    [fmtH(endH * 0.75), peak],
+    [fmtH(endH), 0],
+  ];
+  for (const [t, v] of tsRows) {
+    push(`${pad(tsName, 17)}${pad(t, 11)}${v.toFixed(4)}`);
+  }
+  push();
+
+
   push("[REPORT]");
   push("INPUT      NO");
   push("CONTROLS   NO");
