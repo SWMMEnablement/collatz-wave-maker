@@ -338,9 +338,12 @@ function runStub(built: BuildResult, inp: string): EngineResult {
   lines.push(`  Used ${tree.nodes.size} nodes, peak at root accumulates ${totalUp} contributors.`);
 
   // synthesize system series
-  const N = times.length;
-  const sumInflow = new Array(N).fill(0);
-  for (const s of series) for (let i = 0; i < N; i++) sumInflow[i] += s.inflow[i] ?? 0;
+  const Nt = times.length;
+  const sumInflow = new Array(Nt).fill(0);
+  for (const s of series) for (let i = 0; i < Nt; i++) sumInflow[i] += s.inflow[i] ?? 0;
+  const rootLink = links.find((l) => l.to === 1);
+  const outflow = rootLink ? rootLink.flow.slice() : new Array(Nt).fill(0);
+  const storage = sumInflow.map((q, i) => Math.max(0, q - (outflow[i] ?? 0)));
   const rootLink = links.find((l) => l.to === 1);
   const outflow = rootLink ? rootLink.flow.slice() : new Array(N).fill(0);
   const storage = sumInflow.map((q, i) => Math.max(0, q - (outflow[i] ?? 0)));
