@@ -25,7 +25,7 @@ interface Props {
   built: BuildResult;
 }
 
-type Metric = "depth" | "inflow" | "linkflow";
+type Metric = "depth" | "inflow" | "linkflow" | "system";
 
 export function EngineRunner({ built }: Props) {
   const [running, setRunning] = useState(false);
