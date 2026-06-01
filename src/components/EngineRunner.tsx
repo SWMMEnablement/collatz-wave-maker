@@ -57,7 +57,7 @@ export function EngineRunner({ built }: Props) {
     URL.revokeObjectURL(url);
   };
 
-  // pick a sensible set of series to chart by metric
+  // Build chart series. Plot ALL nodes/links (no top-N cap), sorted by peak.
   const chartData = (() => {
     if (!result || result.times.length === 0)
       return { rows: [] as Record<string, number>[], keys: [] as string[], labels: [] as string[], yLabel: "" };
@@ -69,8 +69,25 @@ export function EngineRunner({ built }: Props) {
           label: `${l.id} (${l.from}→${l.to})`,
           values: l.flow,
         }))
-        .sort((a, b) => Math.max(...b.values) - Math.max(...a.values))
-        .slice(0, 6);
+        .sort((a, b) => Math.max(...b.values) - Math.max(...a.values));
+    } else if (metric === "system") {
+      const sys = result.system;
+      const candidates: { key: keyof typeof sys; label: string }[] = [
+        { key: "totalInflow", label: "Total inflow" },
+        { key: "outflow", label: "Outfall flow" },
+        { key: "flooding", label: "Flooding" },
+        { key: "storage", label: "Storage" },
+        { key: "runoff", label: "Runoff" },
+        { key: "dwflow", label: "Dry-weather flow" },
+        { key: "rainfall", label: "Rainfall" },
+      ];
+      entries = candidates
+        .map((c) => ({ key: c.key as string, label: c.label, values: sys[c.key] ?? [] }))
+        .filter((e) => e.values.length > 0 && Math.max(...e.values) > 0);
+      if (entries.length === 0) {
+        // show totalInflow even if zero so chart isn't empty
+        entries = [{ key: "totalInflow", label: "Total inflow", values: sys.totalInflow }];
+      }
     } else {
       const get = (s: { depth: number[]; inflow: number[] }) =>
         metric === "depth" ? s.depth : s.inflow;
@@ -80,8 +97,7 @@ export function EngineRunner({ built }: Props) {
           label: `node ${s.node}`,
           values: get(s),
         }))
-        .sort((a, b) => Math.max(...b.values) - Math.max(...a.values))
-        .slice(0, 6);
+        .sort((a, b) => Math.max(...b.values) - Math.max(...a.values));
     }
     const rows = result.times.map((t, i) => {
       const row: Record<string, number> = { t };
@@ -89,7 +105,13 @@ export function EngineRunner({ built }: Props) {
       return row;
     });
     const yLabel =
-      metric === "depth" ? "depth" : metric === "inflow" ? "node inflow" : "link flow";
+      metric === "depth"
+        ? "depth"
+        : metric === "inflow"
+          ? "node inflow"
+          : metric === "linkflow"
+            ? "link flow"
+            : "system flow";
     return { rows, keys: entries.map((e) => e.key), labels: entries.map((e) => e.label), yLabel };
   })();
 
