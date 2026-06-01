@@ -80,20 +80,25 @@ export function GeneratorForm({ value, onChange }: Props) {
           </span>
         </div>
         <Slider
-          min={60}
+          min={43200}
           max={86400}
           step={60}
-          value={[value.endTimeSec]}
+          value={[Math.max(43200, value.endTimeSec)]}
           onValueChange={([v]) => set("endTimeSec", v)}
         />
         <Input
           type="number"
-          min={1}
+          min={43200}
           step={1}
           value={value.endTimeSec}
           onChange={num("endTimeSec")}
         />
+        <p className="text-xs text-muted-foreground">Minimum 12 h so the trapezoidal inflow develops fully.</p>
       </div>
+
+      <Field label="Peak inflow / node">
+        <Input type="number" step="0.1" value={value.peakInflow} onChange={num("peakInflow")} />
+      </Field>
 
       <div className="grid grid-cols-2 gap-4">
         <Field label="Base invert"><Input type="number" value={value.baseInvert} onChange={num("baseInvert")} /></Field>
