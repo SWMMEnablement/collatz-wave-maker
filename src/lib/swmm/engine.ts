@@ -344,17 +344,14 @@ function runStub(built: BuildResult, inp: string): EngineResult {
   const rootLink = links.find((l) => l.to === 1);
   const outflow = rootLink ? rootLink.flow.slice() : new Array(Nt).fill(0);
   const storage = sumInflow.map((q, i) => Math.max(0, q - (outflow[i] ?? 0)));
-  const rootLink = links.find((l) => l.to === 1);
-  const outflow = rootLink ? rootLink.flow.slice() : new Array(N).fill(0);
-  const storage = sumInflow.map((q, i) => Math.max(0, q - (outflow[i] ?? 0)));
   const system: SystemSeries = {
     totalInflow: sumInflow,
-    flooding: new Array(N).fill(0),
+    flooding: new Array(Nt).fill(0),
     outflow,
     storage,
-    runoff: new Array(N).fill(0),
+    runoff: new Array(Nt).fill(0),
     dwflow: sumInflow.map((q) => +(q * 0.1).toFixed(4)),
-    rainfall: new Array(N).fill(0),
+    rainfall: new Array(Nt).fill(0),
   };
 
   return {
