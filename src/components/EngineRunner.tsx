@@ -23,11 +23,12 @@ import type { BuildResult } from "@/lib/swmm/inp";
 
 interface Props {
   built: BuildResult;
+  selectedNodes?: Set<number> | null;
 }
 
 type Metric = "depth" | "inflow" | "linkflow" | "system";
 
-export function EngineRunner({ built }: Props) {
+export function EngineRunner({ built, selectedNodes }: Props) {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<EngineResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
