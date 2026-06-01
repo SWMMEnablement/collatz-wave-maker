@@ -91,7 +91,12 @@ function Page() {
               </TabsList>
               <TabsContent value="visual" className="mt-3">
                 <div className="h-[75vh] min-h-[520px]">
-                  <HolyTreeCanvas tree={built.tree} coords={built.coords} />
+                  <HolyTreeCanvas
+                    tree={built.tree}
+                    coords={built.coords}
+                    selectedNodes={selectedNodes}
+                    onSelectionChange={setSelectedNodes}
+                  />
                 </div>
               </TabsContent>
               <TabsContent value="hgl" className="mt-3">
