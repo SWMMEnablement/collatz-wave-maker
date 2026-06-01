@@ -158,6 +158,11 @@ export function EngineRunner({ built, selectedNodes }: Props) {
             <Button variant="outline" size="sm" onClick={downloadRpt}>
               Download .rpt
             </Button>
+            {selectedNodes && selectedNodes.size > 0 && (
+              <span className="rounded border border-primary/40 bg-primary/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-primary">
+                filtered: {selectedNodes.size} node{selectedNodes.size === 1 ? "" : "s"} selected on diagram
+              </span>
+            )}
           </>
         )}
         {err && <span className="text-xs text-destructive">{err}</span>}
