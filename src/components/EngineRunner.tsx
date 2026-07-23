@@ -31,7 +31,7 @@ interface Props {
 
 type Metric = "depth" | "inflow" | "linkflow" | "system";
 
-export function EngineRunner({ built, selectedNodes, result: resultProp, onResult }: Props) {
+export function EngineRunner({ built, opts, selectedNodes, result: resultProp, onResult }: Props) {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
