@@ -303,6 +303,38 @@ export function EngineRunner({ built, opts, selectedNodes, result: resultProp, o
         {err && <span className="text-xs text-destructive">{err}</span>}
       </div>
 
+      {result && runSummary && (
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+          <Metric
+            label="Flow continuity"
+            value={runSummary.flowContinuityPct != null ? runSummary.flowContinuityPct.toFixed(3) + " %" : "—"}
+            tone={runSummary.flowContinuityPct != null && Math.abs(runSummary.flowContinuityPct) > 10 ? "bad" : Math.abs(runSummary.flowContinuityPct ?? 0) > 1 ? "warn" : "ok"}
+          />
+          <Metric
+            label="Runoff continuity"
+            value={runSummary.runoffContinuityPct != null ? runSummary.runoffContinuityPct.toFixed(3) + " %" : "—"}
+            tone={runSummary.runoffContinuityPct != null && Math.abs(runSummary.runoffContinuityPct) > 10 ? "bad" : "ok"}
+          />
+          <Metric
+            label="Flooded nodes"
+            value={String(runSummary.floodedNodes.length)}
+            tone={runSummary.floodedNodes.length > 0 ? "warn" : "ok"}
+          />
+          <Metric
+            label="Max surcharge"
+            value={runSummary.maxSurchargeHours != null ? runSummary.maxSurchargeHours.toFixed(2) + " h" : "0 h"}
+            tone={(runSummary.maxSurchargeHours ?? 0) > 0 ? "warn" : "ok"}
+          />
+          <Metric
+            label="Analysis errors"
+            value={String(runSummary.analysisErrors.length)}
+            tone={runSummary.analysisErrors.length > 0 ? "bad" : "ok"}
+          />
+        </div>
+      )}
+
+
+
       {!result ? (
         <div className="flex flex-1 items-center justify-center rounded-md border border-dashed border-border p-8">
           <div className="max-w-md space-y-2 text-center text-sm leading-relaxed text-muted-foreground">
