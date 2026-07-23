@@ -19,10 +19,11 @@ import {
   Legend,
 } from "recharts";
 import { startEngine, type EngineResult, type EngineRunHandle } from "@/lib/swmm/engine";
-import type { BuildResult } from "@/lib/swmm/inp";
+import type { BuildResult, InpOptions } from "@/lib/swmm/inp";
 
 interface Props {
   built: BuildResult;
+  opts: InpOptions;
   selectedNodes?: Set<number> | null;
   result?: EngineResult | null;
   onResult?: (r: EngineResult | null) => void;
