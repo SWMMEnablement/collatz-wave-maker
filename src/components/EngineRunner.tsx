@@ -167,6 +167,10 @@ export function EngineRunner({ built, opts, selectedNodes, result: resultProp, o
       .sort((a, b) => b.excess - a.excess || b.maxDepth - a.maxDepth);
   }, [result, built]);
 
+  const runSummary = useMemo(() => (result ? parseRptSummary(result.rpt) : null), [result]);
+
+
+
 
   // Build chart series. Plot ALL nodes/links (no top-N cap), sorted by peak.
   const chartData = (() => {
