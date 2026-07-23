@@ -3,7 +3,7 @@ import type { BuildResult } from "./inp";
 
 export interface ValidationIssue {
   level: "error" | "warning";
-  section: "INFLOWS" | "TIMESERIES" | "COORDINATES" | "OPTIONS" | "DWF";
+  section: "INFLOWS" | "TIMESERIES" | "COORDINATES" | "OPTIONS" | "DWF" | "RAINGAGES" | "SUBCATCHMENTS";
   message: string;
 }
 
@@ -60,6 +60,30 @@ export function validateInp(opts: InpOptions, built: BuildResult): ValidationRep
   // DWF
   if (opts.dwfBaseflow < 0) {
     err("DWF", "DWF baseflow must be ≥ 0.");
+  }
+
+  // Storm / raingage
+  if (opts.stormType !== "none") {
+    if (opts.stormDepth <= 0) err("RAINGAGES", "Storm depth must be > 0.");
+    if (opts.stormDurationHr <= 0) err("RAINGAGES", "Storm duration must be > 0 h.");
+    if (opts.stormDurationHr * 60 > opts.endTimeSec / 60)
+      warn("RAINGAGES", "Storm duration exceeds simulation end time — tail will be clipped.");
+    if (opts.rainIntervalMin <= 0) err("RAINGAGES", "Rain interval must be > 0 min.");
+    if (built.storm.length === 0)
+      err("RAINGAGES", "Storm hyetograph is empty — check depth / duration / interval.");
+    if (!opts.subcatchments)
+      warn("RAINGAGES", "Storm is defined but no subcatchments — rainfall has nowhere to land.");
+  }
+
+  // Subcatchments
+  if (opts.subcatchments) {
+    if (opts.subcatchmentArea <= 0) err("SUBCATCHMENTS", "Subcatchment area must be > 0.");
+    if (opts.imperviousPct < 0 || opts.imperviousPct > 100)
+      err("SUBCATCHMENTS", "%Impervious must be between 0 and 100.");
+    if (opts.subWidth <= 0) err("SUBCATCHMENTS", "Subcatchment width must be > 0.");
+    if (opts.subSlope < 0) err("SUBCATCHMENTS", "Subcatchment slope must be ≥ 0.");
+    if (opts.stormType === "none")
+      warn("SUBCATCHMENTS", "Subcatchments enabled but stormType is 'none' — no runoff will be generated.");
   }
 
   const errors = issues.filter((i) => i.level === "error").length;

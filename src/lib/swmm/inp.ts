@@ -1,6 +1,15 @@
 import { buildTree, type CollatzTree } from "../collatz";
 import { layoutFor, type LayoutMode } from "./layout";
 
+export type StormType = "none" | "uniform" | "scs-type-ii" | "alt-block";
+
+export const STORM_OPTIONS: { value: StormType; label: string; description: string }[] = [
+  { value: "none",        label: "None (trapezoidal inflows only)", description: "Skip rainfall — junctions receive the trapezoidal INFLOW hydrograph only." },
+  { value: "uniform",     label: "Uniform hyetograph",              description: "Constant intensity over the storm duration." },
+  { value: "scs-type-ii", label: "SCS Type II (24-hr)",             description: "NRCS Type II cumulative distribution, scaled to duration + depth." },
+  { value: "alt-block",   label: "Alternating block (IDF)",         description: "Chicago-style alternating block from a simple IDF envelope." },
+];
+
 export interface InpOptions {
   maxSeed: number;
   flowUnits: "CFS" | "LPS" | "CMS";
@@ -19,11 +28,23 @@ export interface InpOptions {
   progressiveSizing: boolean; // scale conduit diameter with upstream node count
   maxDiameterMultiplier: number; // upper bound on progressive diameter growth
   // Trapezoidal inflow shape as fractions of endTimeSec.
-
   // rise + plateau + fall should sum to ≤ 1.0.
   trapRiseFrac: number;
   trapPlateauFrac: number;
   trapFallFrac: number;
+
+  // Rainfall / storm
+  stormType: StormType;
+  stormDepth: number;       // total storm depth (in for US, mm for SI)
+  stormDurationHr: number;  // duration of the storm hyetograph
+  rainIntervalMin: number;  // recording interval for RAINGAGES + storm TS
+
+  // Subcatchments (auto-generated, one per junction)
+  subcatchments: boolean;
+  subcatchmentArea: number; // area per subcatchment (acres for US, ha for SI)
+  imperviousPct: number;    // 0..100
+  subWidth: number;         // characteristic width (ft or m)
+  subSlope: number;         // %
 }
 
 export type TrapezoidPresetKey =
@@ -80,9 +101,19 @@ export const defaultOptions: InpOptions = {
   progressiveSizing: false,
   maxDiameterMultiplier: 6,
   trapRiseFrac: 0.25,
-
   trapPlateauFrac: 0.5,
   trapFallFrac: 0.25,
+
+  stormType: "none",
+  stormDepth: 2.0,
+  stormDurationHr: 6,
+  rainIntervalMin: 15,
+
+  subcatchments: false,
+  subcatchmentArea: 1.0,
+  imperviousPct: 40,
+  subWidth: 500,
+  subSlope: 1.0,
 };
 
 
@@ -93,6 +124,111 @@ function secsToHMS(s: number): string {
   const ss = sec % 60;
   const p = (n: number) => String(n).padStart(2, "0");
   return `${p(h)}:${p(m)}:${p(ss)}`;
+}
+
+// ============================================================
+// Storm hyetograph builders
+// ============================================================
+
+// NRCS SCS Type II 24-hr cumulative distribution (fraction of total P).
+// Reference: NRCS TR-55 Appendix B. Time normalized to 24 h.
+const SCS_TYPE_II: Array<[number, number]> = [
+  [0.000, 0.000], [0.083, 0.011], [0.167, 0.022], [0.250, 0.035],
+  [0.333, 0.048], [0.417, 0.064], [0.500, 0.080], [0.542, 0.089],
+  [0.583, 0.098], [0.625, 0.109], [0.667, 0.120], [0.708, 0.133],
+  [0.750, 0.147], [0.771, 0.163], [0.792, 0.181], [0.813, 0.204],
+  [0.833, 0.235], [0.854, 0.283], [0.469 + 0.010, 0.283], // dedup guard
+  [0.479, 0.357], [0.500, 0.663], [0.521, 0.735], [0.542, 0.772],
+  [0.563, 0.799], [0.583, 0.820], [0.625, 0.850], [0.667, 0.880],
+  [0.708, 0.898], [0.750, 0.916], [0.792, 0.934], [0.833, 0.952],
+  [0.875, 0.964], [0.917, 0.976], [0.958, 0.988], [1.000, 1.000],
+].sort((a, b) => a[0] - b[0]);
+
+function interpCumulative(table: Array<[number, number]>, x: number): number {
+  if (x <= table[0][0]) return table[0][1];
+  if (x >= table[table.length - 1][0]) return table[table.length - 1][1];
+  for (let i = 1; i < table.length; i++) {
+    const [x0, y0] = table[i - 1];
+    const [x1, y1] = table[i];
+    if (x <= x1) {
+      if (x1 === x0) return y1;
+      return y0 + ((x - x0) / (x1 - x0)) * (y1 - y0);
+    }
+  }
+  return table[table.length - 1][1];
+}
+
+/**
+ * Build a rainfall hyetograph as (minuteOffset, intensity) pairs.
+ * Intensity units are per hour (in/hr for US, mm/hr for SI).
+ * Returns [] if stormType === "none" or if depth/duration are non-positive.
+ */
+export function buildStormHyetograph(opts: InpOptions): Array<[number, number]> {
+  if (opts.stormType === "none") return [];
+  const depth = opts.stormDepth;
+  const durH = opts.stormDurationHr;
+  const step = Math.max(1, opts.rainIntervalMin);
+  if (depth <= 0 || durH <= 0) return [];
+  const nSteps = Math.max(1, Math.floor((durH * 60) / step));
+  const out: Array<[number, number]> = [];
+  const dtH = step / 60;
+
+  if (opts.stormType === "uniform") {
+    const intensity = depth / durH; // per hour
+    for (let i = 0; i < nSteps; i++) out.push([i * step, intensity]);
+    return out;
+  }
+
+  if (opts.stormType === "scs-type-ii") {
+    // Scale the 24-hr table so that time 0..1 spans the user duration.
+    let prevCum = 0;
+    for (let i = 0; i < nSteps; i++) {
+      const tEnd = ((i + 1) * step) / (durH * 60); // 0..1
+      const cum = interpCumulative(SCS_TYPE_II, tEnd) * depth;
+      const inc = Math.max(0, cum - prevCum);
+      prevCum = cum;
+      out.push([i * step, inc / dtH]);
+    }
+    return out;
+  }
+
+  // Alternating block (Chicago) from simple IDF: i(d) = a / (d + b)^n
+  // Choose a,b,n so cumulative over durH equals depth.
+  const n = 0.75;
+  const b = 10; // minutes
+  // Compute normalization so integrated i(t) dt over 0..durH == depth
+  // Using average intensity from the IDF at increasing durations.
+  const iOfDurMin = (d: number, A: number) => A / Math.pow(d + b, n); // in/hr
+  // Solve A: sum over ranked intervals * dtH == depth
+  const ranked: number[] = [];
+  for (let k = 1; k <= nSteps; k++) {
+    const d = k * step;
+    const totalDepth = iOfDurMin(d, 1) * (d / 60); // depth for 1-normalized A
+    const prevDepth = k === 1 ? 0 : iOfDurMin((k - 1) * step, 1) * ((k - 1) * step / 60);
+    ranked.push(Math.max(1e-9, totalDepth - prevDepth));
+  }
+  const unitDepthSum = ranked.reduce((s, v) => s + v, 0);
+  const A = depth / Math.max(1e-9, unitDepthSum);
+  const blocks = ranked.map((v) => (v * A) / dtH); // convert incremental depth → intensity
+
+  // Alternating placement around center
+  const arranged = new Array<number>(nSteps).fill(0);
+  const mid = Math.floor(nSteps / 2);
+  let left = mid - 1;
+  let right = mid;
+  for (let i = 0; i < blocks.length; i++) {
+    if (i === 0) {
+      arranged[mid] = blocks[0];
+    } else if (i % 2 === 1) {
+      if (right + 1 < nSteps) { arranged[right + 1] = blocks[i]; right++; }
+      else if (left >= 0) { arranged[left] = blocks[i]; left--; }
+    } else {
+      if (left >= 0) { arranged[left] = blocks[i]; left--; }
+      else if (right + 1 < nSteps) { arranged[right + 1] = blocks[i]; right++; }
+    }
+  }
+  for (let i = 0; i < nSteps; i++) out.push([i * step, arranged[i]]);
+  return out;
 }
 
 export interface BuildResult {
@@ -107,6 +243,10 @@ export interface BuildResult {
   upstreamCount: Map<number, number>;
   /** Diameter assigned to each conduit id (e.g. "C1", "C2", ...). */
   conduitDiameter: Map<string, number>;
+  /** Storm hyetograph (minute, intensity) pairs — empty if stormType===none. */
+  storm: Array<[number, number]>;
+  /** Number of auto-generated subcatchments. */
+  subcatchmentCount: number;
 }
 
 
@@ -119,6 +259,12 @@ export function buildInp(opts: InpOptions): BuildResult {
   for (const [n, [x, y]] of rawCoords) {
     coords.set(n, [x * opts.coordScale, y * opts.coordScale]);
   }
+
+  const isUS = opts.flowUnits === "CFS";
+  const rainUnit = isUS ? "IN" : "MM";
+  const storm = buildStormHyetograph(opts);
+  const hasStorm = storm.length > 0;
+  const hasSubs = opts.subcatchments;
 
   const lines: string[] = [];
   const push = (s = "") => lines.push(s);
@@ -154,15 +300,86 @@ export function buildInp(opts: InpOptions): BuildResult {
   push("NORMAL_FLOW_LIMITED  BOTH");
   push("VARIABLE_STEP        0.75");
   push("MIN_SURFAREA         12.566");
+  push();
 
   push("[EVAPORATION]");
   push("CONSTANT  0.0");
   push("DRY_ONLY  NO");
   push();
 
+  if (hasStorm) {
+    push("[RAINGAGES]");
+    push(";;Name           Format    Interval SCF      Source");
+    const intervalHMS = secsToHMS(opts.rainIntervalMin * 60).slice(0, 5); // HH:MM
+    push(`${pad("RG1", 17)}${pad("INTENSITY", 10)}${pad(intervalHMS, 9)}${pad("1.0", 9)}TIMESERIES STORM`);
+    push();
+  }
+
   // invert for a node: deeper-in-tree (further from 1) = higher elevation
   const invertOf = (n: number) =>
     opts.baseInvert + (tree.depth.get(n) ?? 0) * opts.invertDrop;
+
+  // Compute upstream contributing node count (each node contributes itself + all upstream).
+  const children = new Map<number, number[]>();
+  for (const [from, to] of tree.edges) {
+    if (!children.has(to)) children.set(to, []);
+    children.get(to)!.push(from);
+  }
+  const upstreamCount = new Map<number, number>();
+  const countUp = (n: number): number => {
+    if (upstreamCount.has(n)) return upstreamCount.get(n)!;
+    let c = 1;
+    for (const ch of children.get(n) ?? []) c += countUp(ch);
+    upstreamCount.set(n, c);
+    return c;
+  };
+  for (const n of tree.nodes) countUp(n);
+
+  let subcatchmentCount = 0;
+  if (hasSubs) {
+    push("[SUBCATCHMENTS]");
+    push(";;Name           RainGage         Outlet           Area     %Imperv  Width    %Slope   CurbLen  SnowPack");
+    for (const n of tree.nodes) {
+      if (n === 1) continue; // no runoff onto the outfall
+      subcatchmentCount++;
+      push(
+        `${pad("S" + n, 17)}${pad("RG1", 17)}${pad(n, 17)}${pad(
+          opts.subcatchmentArea.toFixed(3),
+          9,
+        )}${pad(opts.imperviousPct.toFixed(1), 9)}${pad(
+          opts.subWidth.toFixed(1),
+          9,
+        )}${pad(opts.subSlope.toFixed(2), 9)}${pad("0", 9)}`,
+      );
+    }
+    push();
+
+    push("[SUBAREAS]");
+    push(";;Subcatchment   N-Imperv   N-Perv     S-Imperv   S-Perv     PctZero    RouteTo    PctRouted");
+    for (const n of tree.nodes) {
+      if (n === 1) continue;
+      push(
+        `${pad("S" + n, 17)}${pad("0.013", 11)}${pad("0.10", 11)}${pad(
+          "0.05",
+          11,
+        )}${pad("0.10", 11)}${pad("25", 11)}${pad("OUTLET", 11)}`,
+      );
+    }
+    push();
+
+    push("[INFILTRATION]");
+    push(";;Subcatchment   MaxRate    MinRate    Decay      DryTime    MaxInfil");
+    for (const n of tree.nodes) {
+      if (n === 1) continue;
+      push(
+        `${pad("S" + n, 17)}${pad("3.0", 11)}${pad("0.5", 11)}${pad(
+          "4.0",
+          11,
+        )}${pad("7.0", 11)}${pad("0", 11)}`,
+      );
+    }
+    push();
+  }
 
   push("[JUNCTIONS]");
   push(";;Name           Elevation  MaxDepth   InitDepth  SurDepth   Aponded");
@@ -182,22 +399,6 @@ export function buildInp(opts: InpOptions): BuildResult {
   push(`${pad(1, 17)}${pad(opts.baseInvert.toFixed(3), 11)}FREE                            NO`);
   push();
 
-  // Compute upstream contributing node count (each node contributes itself + all upstream).
-  const children = new Map<number, number[]>();
-  for (const [from, to] of tree.edges) {
-    if (!children.has(to)) children.set(to, []);
-    children.get(to)!.push(from);
-  }
-  const upstreamCount = new Map<number, number>();
-  const countUp = (n: number): number => {
-    if (upstreamCount.has(n)) return upstreamCount.get(n)!;
-    let c = 1;
-    for (const ch of children.get(n) ?? []) c += countUp(ch);
-    upstreamCount.set(n, c);
-    return c;
-  };
-  for (const n of tree.nodes) countUp(n);
-
   push("[CONDUITS]");
   push(";;Name           From Node        To Node          Length     Roughness  InOffset   OutOffset  InitFlow   MaxFlow");
   const edgeList = Array.from(tree.edges);
@@ -215,7 +416,6 @@ export function buildInp(opts: InpOptions): BuildResult {
 
   // Progressive sizing: diameter grows with sqrt of upstream node count on the
   // upstream end of each conduit, capped at maxDiameterMultiplier × base.
-  const totalUp = upstreamCount.get(1) ?? 1;
   const conduitDiameter = new Map<string, number>();
   const diameterFor = (fromNode: number): number => {
     if (!opts.progressiveSizing) return opts.diameter;
@@ -223,7 +423,6 @@ export function buildInp(opts: InpOptions): BuildResult {
     const scale = Math.min(opts.maxDiameterMultiplier, Math.sqrt(up));
     return opts.diameter * Math.max(1, scale);
   };
-  void totalUp;
 
   push("[XSECTIONS]");
   push(";;Link           Shape        Geom1            Geom2      Geom3      Geom4      Barrels");
@@ -257,7 +456,6 @@ export function buildInp(opts: InpOptions): BuildResult {
   push();
 
   // Trapezoidal inflow hydrograph applied at every junction
-  // Breakpoints: (0,0) ramp up to peak at t/4, plateau to 3t/4, ramp down to t.
   const tsName = "TRAPZ";
   const endH = opts.endTimeSec / 3600;
   const peak = opts.peakInflow;
@@ -293,12 +491,19 @@ export function buildInp(opts: InpOptions): BuildResult {
     [fmtH(rise + plateau), peak],
     [fmtH(rise + plateau + fall), 0],
   ];
-  // If the shape ends before end-of-sim, hold zero at the end so SWMM has a bracket.
   if (rise + plateau + fall < endH - 1e-6) {
     tsRows.push([fmtH(endH), 0]);
   }
   for (const [t, v] of tsRows) {
     push(`${pad(tsName, 17)}${pad(t, 11)}${v.toFixed(4)}`);
+  }
+  // Storm hyetograph time series
+  if (hasStorm) {
+    push(`;`);
+    push(`; STORM hyetograph (${opts.stormType}, depth ${opts.stormDepth} ${rainUnit}, duration ${opts.stormDurationHr} h)`);
+    for (const [minOff, intensity] of storm) {
+      push(`${pad("STORM", 17)}${pad(fmtH(minOff / 60), 11)}${intensity.toFixed(4)}`);
+    }
   }
   push();
 
@@ -323,6 +528,24 @@ export function buildInp(opts: InpOptions): BuildResult {
   push(";;Link           X-Coord            Y-Coord");
   push();
 
+  if (hasSubs) {
+    push("[Polygons]");
+    push(";;Subcatchment   X-Coord            Y-Coord");
+    // small square polygon around each junction
+    const sz = Math.max(0.5, 2 * opts.coordScale * 20);
+    for (const n of tree.nodes) {
+      if (n === 1) continue;
+      const [x, y] = coords.get(n) ?? [0, 0];
+      const corners: Array<[number, number]> = [
+        [x - sz, y - sz], [x + sz, y - sz], [x + sz, y + sz], [x - sz, y + sz],
+      ];
+      for (const [px, py] of corners) {
+        push(`${pad("S" + n, 17)}${pad(px.toFixed(3), 19)}${py.toFixed(3)}`);
+      }
+    }
+    push();
+  }
+
   const inverts = new Map<number, number>();
   for (const n of tree.nodes) inverts.set(n, invertOf(n));
 
@@ -336,7 +559,7 @@ export function buildInp(opts: InpOptions): BuildResult {
     endTimeSec: opts.endTimeSec,
     upstreamCount,
     conduitDiameter,
+    storm,
+    subcatchmentCount,
   };
 }
-
-
