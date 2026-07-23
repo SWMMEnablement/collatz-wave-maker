@@ -293,6 +293,29 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
 
       {hasEngine && (
         <div className="absolute inset-x-3 bottom-3 flex items-center gap-3 rounded-md border border-border bg-background/85 px-3 py-2 backdrop-blur">
+          <button
+            onClick={() => {
+              if (activeIdx >= engineResult!.times.length - 1) setTimeIdx(0);
+              setPlaying((p) => !p);
+            }}
+            className="h-7 w-7 rounded border border-border bg-background font-mono text-xs text-foreground hover:bg-muted"
+            aria-label={playing ? "Pause" : "Play"}
+            title={playing ? "Pause" : "Play"}
+          >
+            {playing ? "❚❚" : "▶"}
+          </button>
+          <select
+            value={speed}
+            onChange={(e) => setSpeed(Number(e.target.value))}
+            className="h-7 rounded border border-border bg-background px-1 font-mono text-[10px] text-foreground"
+            title="Playback speed"
+          >
+            <option value={0.5}>0.5×</option>
+            <option value={1}>1×</option>
+            <option value={2}>2×</option>
+            <option value={4}>4×</option>
+            <option value={8}>8×</option>
+          </select>
           <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
             time
           </span>
@@ -302,7 +325,10 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
             max={engineResult!.times.length - 1}
             step={1}
             value={activeIdx}
-            onChange={(e) => setTimeIdx(Number(e.target.value))}
+            onChange={(e) => {
+              setPlaying(false);
+              setTimeIdx(Number(e.target.value));
+            }}
             className="flex-1 accent-[var(--color-primary)]"
           />
           <span className="font-mono text-[10px] text-primary">
