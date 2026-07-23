@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
@@ -18,7 +18,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { runEngine, type EngineResult } from "@/lib/swmm/engine";
+import { startEngine, type EngineResult, type EngineRunHandle } from "@/lib/swmm/engine";
 import type { BuildResult } from "@/lib/swmm/inp";
 
 interface Props {
@@ -32,6 +32,9 @@ type Metric = "depth" | "inflow" | "linkflow" | "system";
 
 export function EngineRunner({ built, selectedNodes, result: resultProp, onResult }: Props) {
   const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const handleRef = useRef<EngineRunHandle | null>(null);
   const [internalResult, setInternalResult] = useState<EngineResult | null>(null);
   const result = resultProp !== undefined ? resultProp : internalResult;
   const setResult = (r: EngineResult | null) => {
@@ -41,29 +44,127 @@ export function EngineRunner({ built, selectedNodes, result: resultProp, onResul
   const [err, setErr] = useState<string | null>(null);
   const [metric, setMetric] = useState<Metric>("depth");
 
-  const run = async () => {
+  const run = () => {
     setRunning(true);
     setErr(null);
-    try {
-      const r = await runEngine(built);
-      setResult(r);
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setRunning(false);
-    }
+    setProgress(0);
+    setElapsedMs(0);
+    const start = performance.now();
+    const tick = window.setInterval(() => setElapsedMs(performance.now() - start), 200);
+    const handle = startEngine(built, {
+      onProgress: (pct) => setProgress(pct),
+    });
+    handleRef.current = handle;
+    handle.promise
+      .then((r) => setResult(r))
+      .catch((e) => setErr((e as Error).message))
+      .finally(() => {
+        window.clearInterval(tick);
+        handleRef.current = null;
+        setRunning(false);
+      });
+  };
+
+  const cancel = () => {
+    handleRef.current?.cancel();
+    handleRef.current = null;
+    setRunning(false);
+    setErr("cancelled");
+  };
+
+  const triggerDownload = (blob: Blob, name: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const downloadRpt = () => {
     if (!result) return;
-    const blob = new Blob([result.rpt], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "swmm5_report.rpt";
-    a.click();
-    URL.revokeObjectURL(url);
+    triggerDownload(new Blob([result.rpt], { type: "text/plain" }), "swmm5_report.rpt");
   };
+  const downloadOut = () => {
+    if (!result?.out) return;
+    const outBuf: Uint8Array = result.out;
+    // Copy the underlying bytes into a fresh Uint8Array so the Blob owns
+    // ArrayBuffer, not the possibly-shared/backing SharedArrayBuffer view.
+    const copy = new Uint8Array(outBuf.byteLength);
+    copy.set(outBuf);
+    triggerDownload(new Blob([copy.buffer], { type: "application/octet-stream" }), "swmm5_output.out");
+  };
+  const downloadSummary = () => {
+    if (!result) return;
+    const cap = built.inverts;
+    const rows = result.series.map((s) => {
+      let mx = 0;
+      for (const d of s.depth) if (d > mx) mx = d;
+      const invert = cap.get(s.node) ?? 0;
+      const maxHGL = invert + mx;
+      const capacityHead = invert + built.opts.maxDepth;
+      const excess = Math.max(0, mx - built.opts.maxDepth);
+      const status: "normal" | "surcharge" | "flooding" =
+        mx >= built.opts.maxDepth * 1.02
+          ? "flooding"
+          : mx >= built.opts.maxDepth * 0.98
+            ? "surcharge"
+            : "normal";
+      return {
+        node: s.node,
+        invert: +invert.toFixed(3),
+        maxDepth: +mx.toFixed(3),
+        maxHGL: +maxHGL.toFixed(3),
+        capacityHead: +capacityHead.toFixed(3),
+        excessDepth: +excess.toFixed(3),
+        status,
+      };
+    });
+    const summary = {
+      engine: result.engine,
+      durationMs: result.durationMs,
+      steps: result.times.length,
+      pipeCapacity: built.opts.maxDepth,
+      totals: {
+        surcharge: rows.filter((r) => r.status === "surcharge").length,
+        flooding: rows.filter((r) => r.status === "flooding").length,
+      },
+      nodes: rows,
+    };
+    triggerDownload(
+      new Blob([JSON.stringify(summary, null, 2)], { type: "application/json" }),
+      "swmm5_summary.json",
+    );
+  };
+
+  // Per-node results table (post-run panel).
+  const nodeRows = useMemo(() => {
+    if (!result) return [];
+    return result.series
+      .map((s) => {
+        let mx = 0;
+        for (const d of s.depth) if (d > mx) mx = d;
+        const invert = built.inverts.get(s.node) ?? 0;
+        const capacityHead = invert + built.opts.maxDepth;
+        const status: "normal" | "surcharge" | "flooding" =
+          mx >= built.opts.maxDepth * 1.02
+            ? "flooding"
+            : mx >= built.opts.maxDepth * 0.98
+              ? "surcharge"
+              : "normal";
+        return {
+          node: s.node,
+          invert,
+          maxDepth: mx,
+          maxHGL: invert + mx,
+          capacityHead,
+          excess: Math.max(0, mx - built.opts.maxDepth),
+          status,
+        };
+      })
+      .sort((a, b) => b.excess - a.excess || b.maxDepth - a.maxDepth);
+  }, [result, built]);
+
 
   // Build chart series. Plot ALL nodes/links (no top-N cap), sorted by peak.
   const chartData = (() => {
