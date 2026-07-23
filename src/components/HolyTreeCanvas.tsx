@@ -241,6 +241,8 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange,
             const p = coords.get(n);
             if (!p) return null;
             const isSel = selectedNodes?.has(n) ?? false;
+            const status = nodeStatus?.get(n);
+            const statusColor = status ? STATUS_COLORS[status] : null;
             if (n === 1) {
               return (
                 <circle
@@ -248,7 +250,7 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange,
                   cx={p[0]}
                   cy={p[1]}
                   r={10}
-                  fill="oklch(0.82 0.18 65)"
+                  fill={statusColor ?? "oklch(0.82 0.18 65)"}
                   stroke={isSel ? "#7dd3fc" : "oklch(0.95 0.05 65)"}
                   strokeWidth={isSel ? 2.5 : 1.2}
                   filter="url(#glow)"
@@ -259,8 +261,9 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange,
             }
             const d = tree.depth.get(n) ?? 0;
             const t = d / base.maxDepth;
-            const r = Math.max(2.2, 5 - t * 2.5);
-            const fill = `hsl(${230 - t * 30}, 95%, ${65 + t * 15}%)`;
+            const baseR = Math.max(2.2, 5 - t * 2.5);
+            const r = statusColor ? baseR + 1.5 : baseR;
+            const fill = statusColor ?? `hsl(${230 - t * 30}, 95%, ${65 + t * 15}%)`;
             return (
               <circle
                 key={n}
@@ -268,10 +271,10 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange,
                 cy={+p[1].toFixed(2)}
                 r={isSel ? +(r + 1.5).toFixed(2) : +r.toFixed(2)}
                 fill={isSel ? "#7dd3fc" : fill}
-                fillOpacity={isSel ? 1 : +(0.95 - t * 0.25).toFixed(3)}
-                stroke={isSel ? "#7dd3fc" : "hsl(280, 100%, 85%)"}
-                strokeOpacity={isSel ? 1 : +(0.4 - t * 0.25).toFixed(3)}
-                strokeWidth={isSel ? 1 : 0.4}
+                fillOpacity={isSel ? 1 : statusColor ? 1 : +(0.95 - t * 0.25).toFixed(3)}
+                stroke={isSel ? "#7dd3fc" : statusColor ? "#000" : "hsl(280, 100%, 85%)"}
+                strokeOpacity={isSel ? 1 : statusColor ? 0.5 : +(0.4 - t * 0.25).toFixed(3)}
+                strokeWidth={isSel ? 1 : statusColor ? 0.6 : 0.4}
                 filter="url(#glow)"
                 onMouseEnter={() => setHover(n)}
                 onMouseLeave={() => setHover(null)}
