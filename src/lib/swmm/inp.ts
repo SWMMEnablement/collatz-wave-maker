@@ -353,6 +353,33 @@ export function buildInp(opts: InpOptions): BuildResult {
   };
   for (const n of tree.nodes) countUp(n);
 
+  // Node scope helpers -----------------------------------------------------
+  const seedSet = new Set<number>();
+  for (let s = 2; s <= opts.maxSeed; s++) if (tree.nodes.has(s)) seedSet.add(s);
+  const leafSet = new Set<number>();
+  for (const n of tree.nodes) {
+    if (n === 1) continue;
+    if (!(children.get(n)?.length)) leafSet.add(n);
+  }
+  const allSet = new Set<number>();
+  for (const n of tree.nodes) if (n !== 1) allSet.add(n);
+
+  const scopeSet = (scope: InflowScope) =>
+    scope === "seeds" ? seedSet : scope === "leaves" ? leafSet : allSet;
+
+  const inflowSet = scopeSet(opts.inflowScope);
+  const subSet = scopeSet(opts.subcatchmentScope);
+  const generatedCount = allSet.size;
+  const seedCount = seedSet.size;
+  const leafCount = leafSet.size;
+
+  // Fixed-total mode splits area evenly across subs; per-sub uses raw value.
+  const subNodeCount = subSet.size;
+  const effectiveSubArea = opts.subAreaMode === "fixed-total"
+    ? (subNodeCount > 0 ? opts.subTotalArea / subNodeCount : 0)
+    : opts.subcatchmentArea;
+
+
   let subcatchmentCount = 0;
   if (hasSubs) {
     push("[SUBCATCHMENTS]");
