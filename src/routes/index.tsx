@@ -202,7 +202,7 @@ function Page() {
                 <TabsTrigger value="visual">Visual <Badge tone="ok">GENERATED</Badge></TabsTrigger>
                 <TabsTrigger value="hgl">HGL <Badge tone={engineResult ? "ok" : "warn"}>{engineResult ? "ENGINE" : "GEOMETRY PREVIEW"}</Badge></TabsTrigger>
                 <TabsTrigger value="inp">INP text <Badge tone="ok">GENERATED</Badge></TabsTrigger>
-                <TabsTrigger value="engine">Engine <Badge tone="err">NOT INSTALLED</Badge></TabsTrigger>
+                <TabsTrigger value="engine">Engine <Badge tone={engineResult ? "ok" : "warn"}>{engineResult ? `SWMM5 · ${engineResult.engine.toUpperCase()}` : "WASM READY"}</Badge></TabsTrigger>
                 <TabsTrigger value="docs">Docs</TabsTrigger>
               </TabsList>
               <TabsContent value="visual" className="mt-3">
