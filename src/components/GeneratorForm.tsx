@@ -174,9 +174,41 @@ export function GeneratorForm({ value, onChange }: Props) {
         </p>
       </div>
 
-      <Field label="Peak inflow / node">
-        <Input type="number" step="0.1" value={value.peakInflow} onChange={num("peakInflow")} />
-      </Field>
+      <div className="space-y-2 rounded-md border border-border bg-card/60 p-3">
+        <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+          Trapezoidal inflow — apply to
+        </Label>
+        <Select
+          value={value.inflowScope}
+          onValueChange={(v) => set("inflowScope", v as InpOptions["inflowScope"])}
+        >
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="seeds">
+              <div className="flex flex-col">
+                <span>Original seed nodes (2..N)</span>
+                <span className="text-xs text-muted-foreground">One inflow per user seed — matches how "N" is interpreted.</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="leaves">
+              <div className="flex flex-col">
+                <span>Leaf junctions only</span>
+                <span className="text-xs text-muted-foreground">Nodes at the tips of the tree (no upstream neighbours).</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="all">
+              <div className="flex flex-col">
+                <span>Every generated junction</span>
+                <span className="text-xs text-muted-foreground">All non-outfall nodes — much heavier flow load.</span>
+              </div>
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <Field label="Peak inflow / node">
+          <Input type="number" step="0.1" value={value.peakInflow} onChange={num("peakInflow")} />
+        </Field>
+      </div>
+
       <Field label="Coordinate scale">
         <Input type="number" step="0.01" value={value.coordScale} onChange={num("coordScale")} />
       </Field>
