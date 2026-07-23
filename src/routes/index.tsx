@@ -127,11 +127,21 @@ function Page() {
             >
               Download .inp
             </Button>
+            <Button
+              onClick={downloadGeoJson}
+              variant="outline"
+              className="w-full"
+              size="sm"
+              title="Download nodes + conduits as GeoJSON for QGIS / ArcGIS"
+            >
+              Download .geojson (GIS)
+            </Button>
             {!validation.ok && (
               <p className="text-xs text-destructive">
                 {validation.errors} validation error{validation.errors === 1 ? "" : "s"} — see INP tab.
               </p>
             )}
+
             <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
               engine: stub · wasm slot: /public/wasm/
             </p>
