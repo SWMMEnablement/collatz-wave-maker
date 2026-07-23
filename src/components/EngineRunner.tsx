@@ -317,6 +317,7 @@ export function EngineRunner({ built, opts, selectedNodes, result: resultProp, o
         <Tabs defaultValue="graphics" className="flex flex-1 flex-col">
           <TabsList>
             <TabsTrigger value="graphics">Graphics</TabsTrigger>
+            <TabsTrigger value="nodes">Nodes</TabsTrigger>
             <TabsTrigger value="rpt">RPT text</TabsTrigger>
             <TabsTrigger value="log">Log</TabsTrigger>
           </TabsList>
