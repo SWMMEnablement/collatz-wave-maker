@@ -240,6 +240,11 @@ export function GeneratorForm({ value, onChange }: Props) {
         <p className="text-[11px] text-muted-foreground">
           Scale conduit diameter by √(upstream nodes), so pipes near the outfall grow with accumulated flow.
         </p>
+        <p className="text-[11px] text-accent">
+          ⚠ Conceptual topology-based sizing for demonstration only — not
+          hydraulic engineering. Real design must consider slope, roughness,
+          peak flow, velocity, and allowable depth / surcharge.
+        </p>
         {value.progressiveSizing && (
           <Field label={`Max diameter multiplier (×${value.maxDiameterMultiplier})`}>
             <Slider
