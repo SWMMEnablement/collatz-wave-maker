@@ -10,41 +10,48 @@ export const STORM_OPTIONS: { value: StormType; label: string; description: stri
   { value: "alt-block",   label: "Alternating block (IDF)",         description: "Chicago-style alternating block from a simple IDF envelope." },
 ];
 
+export type InflowScope = "seeds" | "leaves" | "all";
+export type SubAreaMode = "per-sub" | "fixed-total";
+
 export interface InpOptions {
   maxSeed: number;
   flowUnits: "CFS" | "LPS" | "CMS";
   baseInvert: number;
-  invertDrop: number; // per depth step toward outfall
+  invertDrop: number;
   maxDepth: number;
   conduitLength: number;
   roughness: number;
   diameter: number;
   layoutMode: LayoutMode;
-  dwfBaseflow: number; // user-defined DWF average flow at each junction
-  dwfPattern: string;  // optional pattern name ("" = none)
-  endTimeSec: number;  // simulation duration in seconds (min 12 h = 43200)
-  peakInflow: number;  // peak of trapezoidal inflow hydrograph at each junction
-  coordScale: number;  // multiplier for all node coordinates
-  progressiveSizing: boolean; // scale conduit diameter with upstream node count
-  maxDiameterMultiplier: number; // upper bound on progressive diameter growth
-  // Trapezoidal inflow shape as fractions of endTimeSec.
-  // rise + plateau + fall should sum to ≤ 1.0.
+  dwfBaseflow: number;
+  dwfPattern: string;
+  endTimeSec: number;
+  peakInflow: number;
+  coordScale: number;
+  progressiveSizing: boolean;
+  maxDiameterMultiplier: number;
   trapRiseFrac: number;
   trapPlateauFrac: number;
   trapFallFrac: number;
 
-  // Rainfall / storm
-  stormType: StormType;
-  stormDepth: number;       // total storm depth (in for US, mm for SI)
-  stormDurationHr: number;  // duration of the storm hyetograph
-  rainIntervalMin: number;  // recording interval for RAINGAGES + storm TS
+  /** Which nodes receive the trapezoidal INFLOW hydrograph. */
+  inflowScope: InflowScope;
 
-  // Subcatchments (auto-generated, one per junction)
+  stormType: StormType;
+  stormDepth: number;
+  stormDurationHr: number;
+  rainIntervalMin: number;
+
   subcatchments: boolean;
-  subcatchmentArea: number; // area per subcatchment (acres for US, ha for SI)
-  imperviousPct: number;    // 0..100
-  subWidth: number;         // characteristic width (ft or m)
-  subSlope: number;         // %
+  /** Which nodes get an auto-generated subcatchment. */
+  subcatchmentScope: InflowScope;
+  /** Per-sub area, or a fixed total watershed area split evenly across subs. */
+  subAreaMode: SubAreaMode;
+  subcatchmentArea: number;
+  subTotalArea: number;
+  imperviousPct: number;
+  subWidth: number;
+  subSlope: number;
 }
 
 export type TrapezoidPresetKey =
@@ -104,13 +111,18 @@ export const defaultOptions: InpOptions = {
   trapPlateauFrac: 0.5,
   trapFallFrac: 0.25,
 
+  inflowScope: "seeds",
+
   stormType: "none",
   stormDepth: 2.0,
   stormDurationHr: 6,
   rainIntervalMin: 15,
 
   subcatchments: false,
+  subcatchmentScope: "seeds",
+  subAreaMode: "fixed-total",
   subcatchmentArea: 1.0,
+  subTotalArea: 100,
   imperviousPct: 40,
   subWidth: 500,
   subSlope: 1.0,
@@ -237,14 +249,22 @@ export interface BuildResult {
   coords: Map<number, [number, number]>;
   inverts: Map<number, number>;
   endTimeSec: number;
-  /** Upstream contributing node count per node (inclusive of the node itself). */
   upstreamCount: Map<number, number>;
-  /** Diameter assigned to each conduit id (e.g. "C1", "C2", ...). */
   conduitDiameter: Map<string, number>;
-  /** Storm hyetograph (minute, intensity) pairs — empty if stormType===none. */
   storm: Array<[number, number]>;
-  /** Number of auto-generated subcatchments. */
   subcatchmentCount: number;
+  /** User seeds actually present in the network (should equal maxSeed). */
+  seedCount: number;
+  /** Nodes with no upstream neighbours (Collatz-tree leaves, excluding outfall). */
+  leafCount: number;
+  /** All non-outfall junctions (seeds + intermediate trajectory nodes). */
+  generatedCount: number;
+  /** Node ids that received the trapezoidal INFLOW hydrograph. */
+  inflowNodes: number[];
+  /** Node ids that got an auto-generated subcatchment. */
+  subcatchmentNodes: number[];
+  /** Effective per-sub area in ac/ha after applying subAreaMode. */
+  effectiveSubArea: number;
 }
 
 
@@ -333,16 +353,43 @@ export function buildInp(opts: InpOptions): BuildResult {
   };
   for (const n of tree.nodes) countUp(n);
 
+  // Node scope helpers -----------------------------------------------------
+  const seedSet = new Set<number>();
+  for (let s = 2; s <= opts.maxSeed; s++) if (tree.nodes.has(s)) seedSet.add(s);
+  const leafSet = new Set<number>();
+  for (const n of tree.nodes) {
+    if (n === 1) continue;
+    if (!(children.get(n)?.length)) leafSet.add(n);
+  }
+  const allSet = new Set<number>();
+  for (const n of tree.nodes) if (n !== 1) allSet.add(n);
+
+  const scopeSet = (scope: InflowScope) =>
+    scope === "seeds" ? seedSet : scope === "leaves" ? leafSet : allSet;
+
+  const inflowSet = scopeSet(opts.inflowScope);
+  const subSet = scopeSet(opts.subcatchmentScope);
+  const generatedCount = allSet.size;
+  const seedCount = seedSet.size;
+  const leafCount = leafSet.size;
+
+  // Fixed-total mode splits area evenly across subs; per-sub uses raw value.
+  const subNodeCount = subSet.size;
+  const effectiveSubArea = opts.subAreaMode === "fixed-total"
+    ? (subNodeCount > 0 ? opts.subTotalArea / subNodeCount : 0)
+    : opts.subcatchmentArea;
+
+
   let subcatchmentCount = 0;
   if (hasSubs) {
     push("[SUBCATCHMENTS]");
     push(";;Name           RainGage         Outlet           Area     %Imperv  Width    %Slope   CurbLen  SnowPack");
     for (const n of tree.nodes) {
-      if (n === 1) continue; // no runoff onto the outfall
+      if (!subSet.has(n)) continue;
       subcatchmentCount++;
       push(
         `${pad("S" + n, 17)}${pad("RG1", 17)}${pad(n, 17)}${pad(
-          opts.subcatchmentArea.toFixed(3),
+          effectiveSubArea.toFixed(3),
           9,
         )}${pad(opts.imperviousPct.toFixed(1), 9)}${pad(
           opts.subWidth.toFixed(1),
@@ -355,7 +402,7 @@ export function buildInp(opts: InpOptions): BuildResult {
     push("[SUBAREAS]");
     push(";;Subcatchment   N-Imperv   N-Perv     S-Imperv   S-Perv     PctZero    RouteTo    PctRouted");
     for (const n of tree.nodes) {
-      if (n === 1) continue;
+      if (!subSet.has(n)) continue;
       push(
         `${pad("S" + n, 17)}${pad("0.013", 11)}${pad("0.10", 11)}${pad(
           "0.05",
@@ -368,7 +415,7 @@ export function buildInp(opts: InpOptions): BuildResult {
     push("[INFILTRATION]");
     push(";;Subcatchment   MaxRate    MinRate    Decay      DryTime    MaxInfil");
     for (const n of tree.nodes) {
-      if (n === 1) continue;
+      if (!subSet.has(n)) continue;
       push(
         `${pad("S" + n, 17)}${pad("3.0", 11)}${pad("0.5", 11)}${pad(
           "4.0",
@@ -467,8 +514,10 @@ export function buildInp(opts: InpOptions): BuildResult {
   };
   push("[INFLOWS]");
   push(";;Node           Constituent      Time Series      Type     Mfactor  Sfactor  Baseline Pattern");
+  const inflowNodes: number[] = [];
   for (const n of tree.nodes) {
-    if (n === 1) continue;
+    if (!inflowSet.has(n)) continue;
+    inflowNodes.push(n);
     push(
       `${pad(n, 17)}${pad("FLOW", 17)}${pad(tsName, 17)}${pad("FLOW", 9)}${pad(
         "1.0",
@@ -532,7 +581,7 @@ export function buildInp(opts: InpOptions): BuildResult {
     // small square polygon around each junction
     const sz = Math.max(0.5, 2 * opts.coordScale * 20);
     for (const n of tree.nodes) {
-      if (n === 1) continue;
+      if (!subSet.has(n)) continue;
       const [x, y] = coords.get(n) ?? [0, 0];
       const corners: Array<[number, number]> = [
         [x - sz, y - sz], [x + sz, y - sz], [x + sz, y + sz], [x - sz, y + sz],
@@ -559,5 +608,11 @@ export function buildInp(opts: InpOptions): BuildResult {
     conduitDiameter,
     storm,
     subcatchmentCount,
+    seedCount,
+    leafCount,
+    generatedCount,
+    inflowNodes,
+    subcatchmentNodes: Array.from(subSet),
+    effectiveSubArea,
   };
 }

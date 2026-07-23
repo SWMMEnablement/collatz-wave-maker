@@ -117,18 +117,44 @@ function Page() {
             <ThemeToggle />
           </div>
           <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-            Every integer in 1..N becomes a junction. Every Collatz step
-            (n/2 or 3n+1) becomes a conduit. Node 1 is the outfall — all
-            flows drain to it. A stub WASM SWMM5 engine slot is wired and
-            ready for a real <code className="font-mono text-primary">swmm5.wasm</code> drop-in.
+            Every integer from <span className="text-primary">1 through N</span> is used as a
+            seed. Every distinct integer encountered along those trajectories becomes
+            a junction, so the network typically has many more nodes than seeds.
+            Every Collatz step (n/2 or 3n+1) becomes a conduit, and node&nbsp;1 is a
+            FREE outfall that all flows drain toward.
           </p>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            The Collatz conjecture, also known as the 3n+1 problem, is an unsolved
-            mathematical puzzle: start with any positive integer n; if n is even,
-            divide it by 2, and if n is odd, multiply by 3 and add 1. Repeating
-            this process always seems to reach 1, but no one has proven it for
-            every number.
+          <p className="mt-2 max-w-2xl text-xs text-muted-foreground">
+            <span className="font-mono uppercase tracking-wider text-accent">Model status:</span>{" "}
+            the <code className="font-mono">.inp</code>, GeoJSON, and geometric HGL preview
+            are generated deterministically from the topology. The SWMM5 WASM
+            engine is a stub slot at <code className="font-mono text-primary">/public/wasm/</code>
+            {" "}— HGL / node status shown before a run is a <em>geometry preview</em>,
+            not a solver result. Progressive pipe sizing uses <code className="font-mono">√upstream</code>
+            {" "}nodes and is a conceptual demo, not hydraulic design.
           </p>
+          <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
+            The Collatz conjecture (3n+1 problem) is an unsolved puzzle: for any
+            positive integer <em>n</em>, halve it when even and set it to 3n+1 when
+            odd. Every seed tested so far eventually reaches 1, but no one has proved
+            it always does.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+              Presets:
+            </span>
+            {PRESETS.map((p) => (
+              <Button
+                key={p.label}
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-[11px]"
+                onClick={() => setOpts((prev) => ({ ...prev, ...p.patch }))}
+                title={p.title}
+              >
+                {p.label}
+              </Button>
+            ))}
+          </div>
         </header>
 
         <div className="grid gap-8 lg:grid-cols-[360px_1fr]">
@@ -158,18 +184,25 @@ function Page() {
               </p>
             )}
 
-            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-              engine: stub · wasm slot: /public/wasm/
-            </p>
+            <div className="rounded-md border border-border bg-card/60 p-3 space-y-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              <div>seeds: <span className="text-primary">{built.seedCount}</span> (2..{opts.maxSeed})</div>
+              <div>generated junctions: <span className="text-primary">{built.generatedCount}</span></div>
+              <div>leaves: <span className="text-primary">{built.leafCount}</span></div>
+              <div>inflow @ {opts.inflowScope}: <span className="text-primary">{built.inflowNodes.length}</span> nodes</div>
+              {opts.subcatchments && (
+                <div>subs @ {opts.subcatchmentScope}: <span className="text-primary">{built.subcatchmentCount}</span> · {built.effectiveSubArea.toFixed(3)} {opts.flowUnits === "CFS" ? "ac" : "ha"} ea</div>
+              )}
+              <div className="pt-1">engine: <span className="text-accent">stub</span> · wasm: /public/wasm/</div>
+            </div>
           </aside>
 
           <section>
             <Tabs defaultValue="visual">
               <TabsList>
-                <TabsTrigger value="visual">Visual</TabsTrigger>
-                <TabsTrigger value="hgl">HGL</TabsTrigger>
-                <TabsTrigger value="inp">INP text</TabsTrigger>
-                <TabsTrigger value="engine">Engine</TabsTrigger>
+                <TabsTrigger value="visual">Visual <Badge tone="ok">GENERATED</Badge></TabsTrigger>
+                <TabsTrigger value="hgl">HGL <Badge tone={engineResult ? "ok" : "warn"}>{engineResult ? "ENGINE" : "GEOMETRY PREVIEW"}</Badge></TabsTrigger>
+                <TabsTrigger value="inp">INP text <Badge tone="ok">GENERATED</Badge></TabsTrigger>
+                <TabsTrigger value="engine">Engine <Badge tone="err">NOT INSTALLED</Badge></TabsTrigger>
                 <TabsTrigger value="docs">Docs</TabsTrigger>
               </TabsList>
               <TabsContent value="visual" className="mt-3">
@@ -227,5 +260,27 @@ function Page() {
         </div>
       </div>
     </main>
+  );
+}
+
+const PRESETS: Array<{ label: string; title: string; patch: Partial<InpOptions> }> = [
+  { label: "N=10",    title: "Tiny network — 20 nodes, quick preview",         patch: { maxSeed: 10 } },
+  { label: "N=27",    title: "Classic Collatz record (seed 27 → 111 steps)",   patch: { maxSeed: 27 } },
+  { label: "N=100",   title: "Default — 251 generated junctions",              patch: { maxSeed: 100 } },
+  { label: "N=1000",  title: "Big network — ~2k nodes",                        patch: { maxSeed: 1000 } },
+  { label: "Stress",  title: "Stress test — 5000 seeds, may slow rendering",   patch: { maxSeed: 5000 } },
+];
+
+function Badge({ tone, children }: { tone: "ok" | "warn" | "err"; children: React.ReactNode }) {
+  const cls =
+    tone === "ok"
+      ? "border-primary/40 bg-primary/10 text-primary"
+      : tone === "warn"
+      ? "border-accent/50 bg-accent/10 text-accent"
+      : "border-destructive/50 bg-destructive/10 text-destructive";
+  return (
+    <span className={`ml-2 rounded-sm border px-1 py-0.5 font-mono text-[8px] uppercase tracking-wider ${cls}`}>
+      {children}
+    </span>
   );
 }

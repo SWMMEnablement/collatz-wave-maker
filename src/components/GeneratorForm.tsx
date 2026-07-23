@@ -174,9 +174,41 @@ export function GeneratorForm({ value, onChange }: Props) {
         </p>
       </div>
 
-      <Field label="Peak inflow / node">
-        <Input type="number" step="0.1" value={value.peakInflow} onChange={num("peakInflow")} />
-      </Field>
+      <div className="space-y-2 rounded-md border border-border bg-card/60 p-3">
+        <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+          Trapezoidal inflow — apply to
+        </Label>
+        <Select
+          value={value.inflowScope}
+          onValueChange={(v) => set("inflowScope", v as InpOptions["inflowScope"])}
+        >
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="seeds">
+              <div className="flex flex-col">
+                <span>Original seed nodes (2..N)</span>
+                <span className="text-xs text-muted-foreground">One inflow per user seed — matches how "N" is interpreted.</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="leaves">
+              <div className="flex flex-col">
+                <span>Leaf junctions only</span>
+                <span className="text-xs text-muted-foreground">Nodes at the tips of the tree (no upstream neighbours).</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="all">
+              <div className="flex flex-col">
+                <span>Every generated junction</span>
+                <span className="text-xs text-muted-foreground">All non-outfall nodes — much heavier flow load.</span>
+              </div>
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <Field label="Peak inflow / node">
+          <Input type="number" step="0.1" value={value.peakInflow} onChange={num("peakInflow")} />
+        </Field>
+      </div>
+
       <Field label="Coordinate scale">
         <Input type="number" step="0.01" value={value.coordScale} onChange={num("coordScale")} />
       </Field>
@@ -207,6 +239,11 @@ export function GeneratorForm({ value, onChange }: Props) {
         </label>
         <p className="text-[11px] text-muted-foreground">
           Scale conduit diameter by √(upstream nodes), so pipes near the outfall grow with accumulated flow.
+        </p>
+        <p className="text-[11px] text-accent">
+          ⚠ Conceptual topology-based sizing for demonstration only — not
+          hydraulic engineering. Real design must consider slope, roughness,
+          peak flow, velocity, and allowable depth / surcharge.
         </p>
         {value.progressiveSizing && (
           <Field label={`Max diameter multiplier (×${value.maxDiameterMultiplier})`}>
@@ -273,21 +310,67 @@ export function GeneratorForm({ value, onChange }: Props) {
         <p className="text-[11px] text-muted-foreground">
           Drops one subcatchment per junction (outlet = the junction) so rainfall turns into runoff.
         </p>
+        <p className="text-[11px] text-muted-foreground">
+          Runoff drains via each subcatchment's outlet junction.
+        </p>
         {value.subcatchments && (
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={`Area / sub (${value.flowUnits === "CFS" ? "ac" : "ha"})`}>
-              <Input type="number" step="0.1" min={0} value={value.subcatchmentArea} onChange={num("subcatchmentArea")} />
+          <>
+            <Field label="Create catchments at">
+              <Select
+                value={value.subcatchmentScope}
+                onValueChange={(v) => set("subcatchmentScope", v as InpOptions["subcatchmentScope"])}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="seeds">Original seed nodes (2..N)</SelectItem>
+                  <SelectItem value="leaves">Leaf junctions only</SelectItem>
+                  <SelectItem value="all">Every generated junction</SelectItem>
+                </SelectContent>
+              </Select>
             </Field>
-            <Field label="% Impervious">
-              <Input type="number" step="1" min={0} max={100} value={value.imperviousPct} onChange={num("imperviousPct")} />
+            <Field label="Area mode">
+              <Select
+                value={value.subAreaMode}
+                onValueChange={(v) => set("subAreaMode", v as InpOptions["subAreaMode"])}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fixed-total">
+                    <div className="flex flex-col">
+                      <span>Fixed total area (split evenly)</span>
+                      <span className="text-xs text-muted-foreground">Total watershed size stays constant across N.</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="per-sub">
+                    <div className="flex flex-col">
+                      <span>Fixed area per catchment</span>
+                      <span className="text-xs text-muted-foreground">Watershed grows with the number of catchments.</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </Field>
-            <Field label={`Width (${value.flowUnits === "CFS" ? "ft" : "m"})`}>
-              <Input type="number" step="10" min={0} value={value.subWidth} onChange={num("subWidth")} />
-            </Field>
-            <Field label="Slope %">
-              <Input type="number" step="0.1" min={0} value={value.subSlope} onChange={num("subSlope")} />
-            </Field>
-          </div>
+            <div className="grid grid-cols-2 gap-3">
+              {value.subAreaMode === "per-sub" ? (
+                <Field label={`Area / sub (${value.flowUnits === "CFS" ? "ac" : "ha"})`}>
+                  <Input type="number" step="0.1" min={0} value={value.subcatchmentArea} onChange={num("subcatchmentArea")} />
+                </Field>
+              ) : (
+                <Field label={`Total area (${value.flowUnits === "CFS" ? "ac" : "ha"})`}>
+                  <Input type="number" step="1" min={0} value={value.subTotalArea} onChange={num("subTotalArea")} />
+                </Field>
+              )}
+              <Field label="% Impervious">
+                <Input type="number" step="1" min={0} max={100} value={value.imperviousPct} onChange={num("imperviousPct")} />
+              </Field>
+              <Field label={`Width (${value.flowUnits === "CFS" ? "ft" : "m"})`}>
+                <Input type="number" step="10" min={0} value={value.subWidth} onChange={num("subWidth")} />
+              </Field>
+              <Field label="Slope %">
+                <Input type="number" step="0.1" min={0} value={value.subSlope} onChange={num("subSlope")} />
+              </Field>
+            </div>
+          </>
         )}
       </div>
     </div>
