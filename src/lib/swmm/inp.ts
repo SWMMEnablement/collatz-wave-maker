@@ -385,11 +385,11 @@ export function buildInp(opts: InpOptions): BuildResult {
     push("[SUBCATCHMENTS]");
     push(";;Name           RainGage         Outlet           Area     %Imperv  Width    %Slope   CurbLen  SnowPack");
     for (const n of tree.nodes) {
-      if (n === 1) continue; // no runoff onto the outfall
+      if (!subSet.has(n)) continue;
       subcatchmentCount++;
       push(
         `${pad("S" + n, 17)}${pad("RG1", 17)}${pad(n, 17)}${pad(
-          opts.subcatchmentArea.toFixed(3),
+          effectiveSubArea.toFixed(3),
           9,
         )}${pad(opts.imperviousPct.toFixed(1), 9)}${pad(
           opts.subWidth.toFixed(1),
@@ -402,7 +402,7 @@ export function buildInp(opts: InpOptions): BuildResult {
     push("[SUBAREAS]");
     push(";;Subcatchment   N-Imperv   N-Perv     S-Imperv   S-Perv     PctZero    RouteTo    PctRouted");
     for (const n of tree.nodes) {
-      if (n === 1) continue;
+      if (!subSet.has(n)) continue;
       push(
         `${pad("S" + n, 17)}${pad("0.013", 11)}${pad("0.10", 11)}${pad(
           "0.05",
@@ -415,7 +415,7 @@ export function buildInp(opts: InpOptions): BuildResult {
     push("[INFILTRATION]");
     push(";;Subcatchment   MaxRate    MinRate    Decay      DryTime    MaxInfil");
     for (const n of tree.nodes) {
-      if (n === 1) continue;
+      if (!subSet.has(n)) continue;
       push(
         `${pad("S" + n, 17)}${pad("3.0", 11)}${pad("0.5", 11)}${pad(
           "4.0",
