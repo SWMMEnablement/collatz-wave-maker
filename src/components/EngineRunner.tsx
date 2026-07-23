@@ -19,8 +19,15 @@ import {
   Legend,
 } from "recharts";
 import { startEngine, type EngineResult, type EngineRunHandle } from "@/lib/swmm/engine";
-import { parseRptSummary } from "@/lib/swmm/rpt";
+import { parseRptSummary, type RptSummary } from "@/lib/swmm/rpt";
 import type { BuildResult, InpOptions } from "@/lib/swmm/inp";
+import {
+  defaultThresholds,
+  toneForContinuity,
+  toneForFlooded,
+  toneForSurcharge,
+  type Thresholds,
+} from "@/lib/thresholds";
 
 interface Props {
   built: BuildResult;
@@ -28,6 +35,8 @@ interface Props {
   selectedNodes?: Set<number> | null;
   result?: EngineResult | null;
   onResult?: (r: EngineResult | null) => void;
+  thresholds?: Thresholds;
+  onRunComplete?: (built: BuildResult, opts: InpOptions, result: EngineResult, metrics: RptSummary) => void;
 }
 
 type Metric = "depth" | "inflow" | "linkflow" | "system";
