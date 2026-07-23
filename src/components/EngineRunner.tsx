@@ -378,6 +378,46 @@ export function EngineRunner({ built, opts, selectedNodes, result: resultProp, o
             )}
           </TabsContent>
 
+          <TabsContent value="nodes" className="mt-3 flex-1 overflow-auto">
+            <div className="h-full overflow-auto rounded-md border border-border bg-card">
+              <table className="w-full font-mono text-xs">
+                <thead className="sticky top-0 bg-card">
+                  <tr className="border-b border-border text-left uppercase tracking-wider text-muted-foreground">
+                    <th className="px-3 py-2">node</th>
+                    <th className="px-3 py-2 text-right">invert</th>
+                    <th className="px-3 py-2 text-right">max depth</th>
+                    <th className="px-3 py-2 text-right">max HGL</th>
+                    <th className="px-3 py-2 text-right">capacity head</th>
+                    <th className="px-3 py-2 text-right">excess</th>
+                    <th className="px-3 py-2">status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {nodeRows.map((r) => {
+                    const color =
+                      r.status === "flooding" ? "#ef4444" : r.status === "surcharge" ? "#f59e0b" : "#10b981";
+                    return (
+                      <tr key={r.node} className="border-b border-border/50 hover:bg-muted/30">
+                        <td className="px-3 py-1.5 text-primary">{r.node}</td>
+                        <td className="px-3 py-1.5 text-right">{r.invert.toFixed(2)}</td>
+                        <td className="px-3 py-1.5 text-right">{r.maxDepth.toFixed(2)}</td>
+                        <td className="px-3 py-1.5 text-right">{r.maxHGL.toFixed(2)}</td>
+                        <td className="px-3 py-1.5 text-right text-muted-foreground">{r.capacityHead.toFixed(2)}</td>
+                        <td className="px-3 py-1.5 text-right" style={{ color: r.excess > 0 ? color : undefined }}>
+                          {r.excess > 0 ? "+" + r.excess.toFixed(2) : "—"}
+                        </td>
+                        <td className="px-3 py-1.5 uppercase" style={{ color }}>
+                          {r.status}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </TabsContent>
+
+
           <TabsContent value="rpt" className="mt-3 flex-1 overflow-auto">
             <pre className="h-full overflow-auto rounded-md border border-border bg-card p-4 font-mono text-xs leading-relaxed">
               {result.rpt}
