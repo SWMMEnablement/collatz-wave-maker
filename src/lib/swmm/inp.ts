@@ -16,7 +16,10 @@ export interface InpOptions {
   endTimeSec: number;  // simulation duration in seconds (min 12 h = 43200)
   peakInflow: number;  // peak of trapezoidal inflow hydrograph at each junction
   coordScale: number;  // multiplier for all node coordinates
+  progressiveSizing: boolean; // scale conduit diameter with upstream node count
+  maxDiameterMultiplier: number; // upper bound on progressive diameter growth
   // Trapezoidal inflow shape as fractions of endTimeSec.
+
   // rise + plateau + fall should sum to ≤ 1.0.
   trapRiseFrac: number;
   trapPlateauFrac: number;
@@ -74,7 +77,10 @@ export const defaultOptions: InpOptions = {
   endTimeSec: 43200, // 12 hours
   peakInflow: 1.0,
   coordScale: 0.05,
+  progressiveSizing: false,
+  maxDiameterMultiplier: 6,
   trapRiseFrac: 0.25,
+
   trapPlateauFrac: 0.5,
   trapFallFrac: 0.25,
 };
