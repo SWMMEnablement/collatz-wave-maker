@@ -498,8 +498,9 @@ export function EngineRunner({
   );
 }
 
-function MetricCard({ label, value, tone }: { label: string; value: string; tone: "ok" | "warn" | "bad" }) {
-  const color = tone === "bad" ? "#ef4444" : tone === "warn" ? "#f59e0b" : "#10b981";
+function MetricCard({ label, value, tone }: { label: string; value: string; tone: "ok" | "warn" | "bad" | "muted" }) {
+  const color =
+    tone === "bad" ? "#ef4444" : tone === "warn" ? "#f59e0b" : tone === "ok" ? "#10b981" : "hsl(var(--muted-foreground))";
   return (
     <div className="rounded-md border border-border bg-card px-3 py-2">
       <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
