@@ -10,41 +10,48 @@ export const STORM_OPTIONS: { value: StormType; label: string; description: stri
   { value: "alt-block",   label: "Alternating block (IDF)",         description: "Chicago-style alternating block from a simple IDF envelope." },
 ];
 
+export type InflowScope = "seeds" | "leaves" | "all";
+export type SubAreaMode = "per-sub" | "fixed-total";
+
 export interface InpOptions {
   maxSeed: number;
   flowUnits: "CFS" | "LPS" | "CMS";
   baseInvert: number;
-  invertDrop: number; // per depth step toward outfall
+  invertDrop: number;
   maxDepth: number;
   conduitLength: number;
   roughness: number;
   diameter: number;
   layoutMode: LayoutMode;
-  dwfBaseflow: number; // user-defined DWF average flow at each junction
-  dwfPattern: string;  // optional pattern name ("" = none)
-  endTimeSec: number;  // simulation duration in seconds (min 12 h = 43200)
-  peakInflow: number;  // peak of trapezoidal inflow hydrograph at each junction
-  coordScale: number;  // multiplier for all node coordinates
-  progressiveSizing: boolean; // scale conduit diameter with upstream node count
-  maxDiameterMultiplier: number; // upper bound on progressive diameter growth
-  // Trapezoidal inflow shape as fractions of endTimeSec.
-  // rise + plateau + fall should sum to ≤ 1.0.
+  dwfBaseflow: number;
+  dwfPattern: string;
+  endTimeSec: number;
+  peakInflow: number;
+  coordScale: number;
+  progressiveSizing: boolean;
+  maxDiameterMultiplier: number;
   trapRiseFrac: number;
   trapPlateauFrac: number;
   trapFallFrac: number;
 
-  // Rainfall / storm
-  stormType: StormType;
-  stormDepth: number;       // total storm depth (in for US, mm for SI)
-  stormDurationHr: number;  // duration of the storm hyetograph
-  rainIntervalMin: number;  // recording interval for RAINGAGES + storm TS
+  /** Which nodes receive the trapezoidal INFLOW hydrograph. */
+  inflowScope: InflowScope;
 
-  // Subcatchments (auto-generated, one per junction)
+  stormType: StormType;
+  stormDepth: number;
+  stormDurationHr: number;
+  rainIntervalMin: number;
+
   subcatchments: boolean;
-  subcatchmentArea: number; // area per subcatchment (acres for US, ha for SI)
-  imperviousPct: number;    // 0..100
-  subWidth: number;         // characteristic width (ft or m)
-  subSlope: number;         // %
+  /** Which nodes get an auto-generated subcatchment. */
+  subcatchmentScope: InflowScope;
+  /** Per-sub area, or a fixed total watershed area split evenly across subs. */
+  subAreaMode: SubAreaMode;
+  subcatchmentArea: number;
+  subTotalArea: number;
+  imperviousPct: number;
+  subWidth: number;
+  subSlope: number;
 }
 
 export type TrapezoidPresetKey =
