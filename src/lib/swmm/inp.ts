@@ -334,6 +334,9 @@ export function buildInp(opts: InpOptions): BuildResult {
     coords,
     inverts,
     endTimeSec: opts.endTimeSec,
+    upstreamCount,
+    conduitDiameter,
   };
 }
+
 
