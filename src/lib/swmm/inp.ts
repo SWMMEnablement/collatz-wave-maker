@@ -103,7 +103,12 @@ export interface BuildResult {
   coords: Map<number, [number, number]>;
   inverts: Map<number, number>;
   endTimeSec: number;
+  /** Upstream contributing node count per node (inclusive of the node itself). */
+  upstreamCount: Map<number, number>;
+  /** Diameter assigned to each conduit id (e.g. "C1", "C2", ...). */
+  conduitDiameter: Map<string, number>;
 }
+
 
 const pad = (s: string | number, w: number) => String(s).padEnd(w);
 
@@ -177,10 +182,27 @@ export function buildInp(opts: InpOptions): BuildResult {
   push(`${pad(1, 17)}${pad(opts.baseInvert.toFixed(3), 11)}FREE                            NO`);
   push();
 
+  // Compute upstream contributing node count (each node contributes itself + all upstream).
+  const children = new Map<number, number[]>();
+  for (const [from, to] of tree.edges) {
+    if (!children.has(to)) children.set(to, []);
+    children.get(to)!.push(from);
+  }
+  const upstreamCount = new Map<number, number>();
+  const countUp = (n: number): number => {
+    if (upstreamCount.has(n)) return upstreamCount.get(n)!;
+    let c = 1;
+    for (const ch of children.get(n) ?? []) c += countUp(ch);
+    upstreamCount.set(n, c);
+    return c;
+  };
+  for (const n of tree.nodes) countUp(n);
+
   push("[CONDUITS]");
   push(";;Name           From Node        To Node          Length     Roughness  InOffset   OutOffset  InitFlow   MaxFlow");
+  const edgeList = Array.from(tree.edges);
   let cid = 0;
-  for (const [from, to] of tree.edges) {
+  for (const [from, to] of edgeList) {
     cid++;
     push(
       `${pad("C" + cid, 17)}${pad(from, 17)}${pad(to, 17)}${pad(
@@ -191,17 +213,34 @@ export function buildInp(opts: InpOptions): BuildResult {
   }
   push();
 
+  // Progressive sizing: diameter grows with sqrt of upstream node count on the
+  // upstream end of each conduit, capped at maxDiameterMultiplier × base.
+  const totalUp = upstreamCount.get(1) ?? 1;
+  const conduitDiameter = new Map<string, number>();
+  const diameterFor = (fromNode: number): number => {
+    if (!opts.progressiveSizing) return opts.diameter;
+    const up = upstreamCount.get(fromNode) ?? 1;
+    const scale = Math.min(opts.maxDiameterMultiplier, Math.sqrt(up));
+    return opts.diameter * Math.max(1, scale);
+  };
+  void totalUp;
+
   push("[XSECTIONS]");
   push(";;Link           Shape        Geom1            Geom2      Geom3      Geom4      Barrels");
-  for (let i = 1; i <= cid; i++) {
+  for (let i = 0; i < edgeList.length; i++) {
+    const [from] = edgeList[i];
+    const dia = diameterFor(from);
+    const id = "C" + (i + 1);
+    conduitDiameter.set(id, dia);
     push(
-      `${pad("C" + i, 17)}${pad("CIRCULAR", 13)}${pad(
-        opts.diameter.toFixed(3),
+      `${pad(id, 17)}${pad("CIRCULAR", 13)}${pad(
+        dia.toFixed(3),
         17,
       )}${pad(0, 11)}${pad(0, 11)}${pad(0, 11)}1`,
     );
   }
   push();
+
 
   push("[DWF]");
   push(";;Node           Constituent      Baseline   Patterns");
