@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
@@ -18,11 +18,12 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { runEngine, type EngineResult } from "@/lib/swmm/engine";
-import type { BuildResult } from "@/lib/swmm/inp";
+import { startEngine, type EngineResult, type EngineRunHandle } from "@/lib/swmm/engine";
+import type { BuildResult, InpOptions } from "@/lib/swmm/inp";
 
 interface Props {
   built: BuildResult;
+  opts: InpOptions;
   selectedNodes?: Set<number> | null;
   result?: EngineResult | null;
   onResult?: (r: EngineResult | null) => void;
@@ -30,8 +31,11 @@ interface Props {
 
 type Metric = "depth" | "inflow" | "linkflow" | "system";
 
-export function EngineRunner({ built, selectedNodes, result: resultProp, onResult }: Props) {
+export function EngineRunner({ built, opts, selectedNodes, result: resultProp, onResult }: Props) {
   const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const handleRef = useRef<EngineRunHandle | null>(null);
   const [internalResult, setInternalResult] = useState<EngineResult | null>(null);
   const result = resultProp !== undefined ? resultProp : internalResult;
   const setResult = (r: EngineResult | null) => {
@@ -41,29 +45,127 @@ export function EngineRunner({ built, selectedNodes, result: resultProp, onResul
   const [err, setErr] = useState<string | null>(null);
   const [metric, setMetric] = useState<Metric>("depth");
 
-  const run = async () => {
+  const run = () => {
     setRunning(true);
     setErr(null);
-    try {
-      const r = await runEngine(built);
-      setResult(r);
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setRunning(false);
-    }
+    setProgress(0);
+    setElapsedMs(0);
+    const start = performance.now();
+    const tick = window.setInterval(() => setElapsedMs(performance.now() - start), 200);
+    const handle = startEngine(built, {
+      onProgress: (pct) => setProgress(pct),
+    });
+    handleRef.current = handle;
+    handle.promise
+      .then((r) => setResult(r))
+      .catch((e) => setErr((e as Error).message))
+      .finally(() => {
+        window.clearInterval(tick);
+        handleRef.current = null;
+        setRunning(false);
+      });
+  };
+
+  const cancel = () => {
+    handleRef.current?.cancel();
+    handleRef.current = null;
+    setRunning(false);
+    setErr("cancelled");
+  };
+
+  const triggerDownload = (blob: Blob, name: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const downloadRpt = () => {
     if (!result) return;
-    const blob = new Blob([result.rpt], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "swmm5_report.rpt";
-    a.click();
-    URL.revokeObjectURL(url);
+    triggerDownload(new Blob([result.rpt], { type: "text/plain" }), "swmm5_report.rpt");
   };
+  const downloadOut = () => {
+    if (!result?.out) return;
+    const outBuf: Uint8Array = result.out;
+    // Copy the underlying bytes into a fresh Uint8Array so the Blob owns
+    // ArrayBuffer, not the possibly-shared/backing SharedArrayBuffer view.
+    const copy = new Uint8Array(outBuf.byteLength);
+    copy.set(outBuf);
+    triggerDownload(new Blob([copy.buffer], { type: "application/octet-stream" }), "swmm5_output.out");
+  };
+  const downloadSummary = () => {
+    if (!result) return;
+    const cap = built.inverts;
+    const rows = result.series.map((s) => {
+      let mx = 0;
+      for (const d of s.depth) if (d > mx) mx = d;
+      const invert = cap.get(s.node) ?? 0;
+      const maxHGL = invert + mx;
+      const capacityHead = invert + opts.maxDepth;
+      const excess = Math.max(0, mx - opts.maxDepth);
+      const status: "normal" | "surcharge" | "flooding" =
+        mx >= opts.maxDepth * 1.02
+          ? "flooding"
+          : mx >= opts.maxDepth * 0.98
+            ? "surcharge"
+            : "normal";
+      return {
+        node: s.node,
+        invert: +invert.toFixed(3),
+        maxDepth: +mx.toFixed(3),
+        maxHGL: +maxHGL.toFixed(3),
+        capacityHead: +capacityHead.toFixed(3),
+        excessDepth: +excess.toFixed(3),
+        status,
+      };
+    });
+    const summary = {
+      engine: result.engine,
+      durationMs: result.durationMs,
+      steps: result.times.length,
+      pipeCapacity: opts.maxDepth,
+      totals: {
+        surcharge: rows.filter((r) => r.status === "surcharge").length,
+        flooding: rows.filter((r) => r.status === "flooding").length,
+      },
+      nodes: rows,
+    };
+    triggerDownload(
+      new Blob([JSON.stringify(summary, null, 2)], { type: "application/json" }),
+      "swmm5_summary.json",
+    );
+  };
+
+  // Per-node results table (post-run panel).
+  const nodeRows = useMemo(() => {
+    if (!result) return [];
+    return result.series
+      .map((s) => {
+        let mx = 0;
+        for (const d of s.depth) if (d > mx) mx = d;
+        const invert = built.inverts.get(s.node) ?? 0;
+        const capacityHead = invert + opts.maxDepth;
+        const status: "normal" | "surcharge" | "flooding" =
+          mx >= opts.maxDepth * 1.02
+            ? "flooding"
+            : mx >= opts.maxDepth * 0.98
+              ? "surcharge"
+              : "normal";
+        return {
+          node: s.node,
+          invert,
+          maxDepth: mx,
+          maxHGL: invert + mx,
+          capacityHead,
+          excess: Math.max(0, mx - opts.maxDepth),
+          status,
+        };
+      })
+      .sort((a, b) => b.excess - a.excess || b.maxDepth - a.maxDepth);
+  }, [result, built]);
+
 
   // Build chart series. Plot ALL nodes/links (no top-N cap), sorted by peak.
   const chartData = (() => {
@@ -141,10 +243,25 @@ export function EngineRunner({ built, selectedNodes, result: resultProp, onResul
   return (
     <div className="flex h-full flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={run} disabled={running} size="lg">
-          {running ? "Running…" : "Run SWMM5"}
-        </Button>
-        {result && (
+        {!running ? (
+          <Button onClick={run} size="lg">Run SWMM5</Button>
+        ) : (
+          <Button onClick={cancel} size="lg" variant="destructive">Cancel</Button>
+        )}
+        {running && (
+          <div className="flex min-w-[240px] flex-1 items-center gap-2">
+            <div className="relative h-2 flex-1 overflow-hidden rounded bg-muted">
+              <div
+                className="absolute inset-y-0 left-0 bg-primary transition-[width] duration-150"
+                style={{ width: `${Math.max(2, progress)}%` }}
+              />
+            </div>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              {progress > 0 ? `${progress.toFixed(0)}%` : "warming up…"} · {(elapsedMs / 1000).toFixed(1)}s
+            </span>
+          </div>
+        )}
+        {result && !running && (
           <>
             <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
               engine: <span className="text-primary">{result.engine}</span> ·{" "}
@@ -163,7 +280,13 @@ export function EngineRunner({ built, selectedNodes, result: resultProp, onResul
               </SelectContent>
             </Select>
             <Button variant="outline" size="sm" onClick={downloadRpt}>
-              Download .rpt
+              .rpt
+            </Button>
+            <Button variant="outline" size="sm" onClick={downloadOut} disabled={!result.out}>
+              .out
+            </Button>
+            <Button variant="outline" size="sm" onClick={downloadSummary}>
+              summary.json
             </Button>
             {selectedNodes && selectedNodes.size > 0 && (
               <span className="rounded border border-primary/40 bg-primary/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-primary">
@@ -194,6 +317,7 @@ export function EngineRunner({ built, selectedNodes, result: resultProp, onResul
         <Tabs defaultValue="graphics" className="flex flex-1 flex-col">
           <TabsList>
             <TabsTrigger value="graphics">Graphics</TabsTrigger>
+            <TabsTrigger value="nodes">Nodes</TabsTrigger>
             <TabsTrigger value="rpt">RPT text</TabsTrigger>
             <TabsTrigger value="log">Log</TabsTrigger>
           </TabsList>
@@ -253,6 +377,46 @@ export function EngineRunner({ built, selectedNodes, result: resultProp, onResul
               </div>
             )}
           </TabsContent>
+
+          <TabsContent value="nodes" className="mt-3 flex-1 overflow-auto">
+            <div className="h-full overflow-auto rounded-md border border-border bg-card">
+              <table className="w-full font-mono text-xs">
+                <thead className="sticky top-0 bg-card">
+                  <tr className="border-b border-border text-left uppercase tracking-wider text-muted-foreground">
+                    <th className="px-3 py-2">node</th>
+                    <th className="px-3 py-2 text-right">invert</th>
+                    <th className="px-3 py-2 text-right">max depth</th>
+                    <th className="px-3 py-2 text-right">max HGL</th>
+                    <th className="px-3 py-2 text-right">capacity head</th>
+                    <th className="px-3 py-2 text-right">excess</th>
+                    <th className="px-3 py-2">status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {nodeRows.map((r) => {
+                    const color =
+                      r.status === "flooding" ? "#ef4444" : r.status === "surcharge" ? "#f59e0b" : "#10b981";
+                    return (
+                      <tr key={r.node} className="border-b border-border/50 hover:bg-muted/30">
+                        <td className="px-3 py-1.5 text-primary">{r.node}</td>
+                        <td className="px-3 py-1.5 text-right">{r.invert.toFixed(2)}</td>
+                        <td className="px-3 py-1.5 text-right">{r.maxDepth.toFixed(2)}</td>
+                        <td className="px-3 py-1.5 text-right">{r.maxHGL.toFixed(2)}</td>
+                        <td className="px-3 py-1.5 text-right text-muted-foreground">{r.capacityHead.toFixed(2)}</td>
+                        <td className="px-3 py-1.5 text-right" style={{ color: r.excess > 0 ? color : undefined }}>
+                          {r.excess > 0 ? "+" + r.excess.toFixed(2) : "—"}
+                        </td>
+                        <td className="px-3 py-1.5 uppercase" style={{ color }}>
+                          {r.status}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </TabsContent>
+
 
           <TabsContent value="rpt" className="mt-3 flex-1 overflow-auto">
             <pre className="h-full overflow-auto rounded-md border border-border bg-card p-4 font-mono text-xs leading-relaxed">
