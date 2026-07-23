@@ -58,7 +58,13 @@ export function GeneratorForm({ value, onChange }: Props) {
           value={[value.maxSeed]}
           onValueChange={([v]) => set("maxSeed", v)}
         />
+        {value.maxSeed >= 2000 && (
+          <p className="text-[11px] text-accent">
+            ⚠ Large N — expect &gt;10k nodes. Rendering and WASM run may slow the browser.
+          </p>
+        )}
       </div>
+
 
       <div className="space-y-2">
         <Label>Flow units</Label>
