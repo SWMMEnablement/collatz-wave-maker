@@ -66,9 +66,31 @@ function ThemeToggle() {
 function Page() {
   const [opts, setOpts] = useState<InpOptions>(defaultOptions);
   const [selectedNodes, setSelectedNodes] = useState<Set<number> | null>(null);
-  const [engineResult, setEngineResult] = useState<import("@/lib/swmm/engine").EngineResult | null>(null);
+  const [engineResult, setEngineResult] = useState<EngineResult | null>(null);
+  const [tab, setTab] = useState<string>("visual");
   const built = useMemo(() => buildInp(opts), [opts]);
   const validation = useMemo(() => validateInp(opts, built), [opts, built]);
+  const [thresholds, setThresholds, resetThresholds] = useThresholds();
+  const history = useRunHistory();
+
+  const handleRunComplete = useCallback(
+    (b: BuildResult, o: InpOptions, r: EngineResult, m: RptSummary) => {
+      const entry = makeHistoryEntry(o, b, r, m);
+      history.add(entry, r);
+    },
+    [history],
+  );
+
+  const reopenRun = useCallback(
+    (id: string) => {
+      const r = history.getResult(id);
+      if (r) {
+        setEngineResult(r);
+        setTab("engine");
+      }
+    },
+    [history],
+  );
 
   const nodeStatus = useMemo(() => {
     if (!engineResult) return null;
