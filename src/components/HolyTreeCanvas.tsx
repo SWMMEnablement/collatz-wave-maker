@@ -8,9 +8,16 @@ interface Props {
   coords: Map<number, [number, number]>;
   selectedNodes?: Set<number> | null;
   onSelectionChange?: (nodes: Set<number> | null) => void;
+  nodeStatus?: Map<number, "normal" | "surcharge" | "flooding"> | null;
 }
 
-export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange }: Props) {
+const STATUS_COLORS = {
+  normal: "#10b981",
+  surcharge: "#f59e0b",
+  flooding: "#ef4444",
+} as const;
+
+export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange, nodeStatus }: Props) {
   const [hover, setHover] = useState<number | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -234,6 +241,8 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange 
             const p = coords.get(n);
             if (!p) return null;
             const isSel = selectedNodes?.has(n) ?? false;
+            const status = nodeStatus?.get(n);
+            const statusColor = status ? STATUS_COLORS[status] : null;
             if (n === 1) {
               return (
                 <circle
@@ -241,7 +250,7 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange 
                   cx={p[0]}
                   cy={p[1]}
                   r={10}
-                  fill="oklch(0.82 0.18 65)"
+                  fill={statusColor ?? "oklch(0.82 0.18 65)"}
                   stroke={isSel ? "#7dd3fc" : "oklch(0.95 0.05 65)"}
                   strokeWidth={isSel ? 2.5 : 1.2}
                   filter="url(#glow)"
@@ -252,8 +261,9 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange 
             }
             const d = tree.depth.get(n) ?? 0;
             const t = d / base.maxDepth;
-            const r = Math.max(2.2, 5 - t * 2.5);
-            const fill = `hsl(${230 - t * 30}, 95%, ${65 + t * 15}%)`;
+            const baseR = Math.max(2.2, 5 - t * 2.5);
+            const r = statusColor ? baseR + 1.5 : baseR;
+            const fill = statusColor ?? `hsl(${230 - t * 30}, 95%, ${65 + t * 15}%)`;
             return (
               <circle
                 key={n}
@@ -261,10 +271,10 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange 
                 cy={+p[1].toFixed(2)}
                 r={isSel ? +(r + 1.5).toFixed(2) : +r.toFixed(2)}
                 fill={isSel ? "#7dd3fc" : fill}
-                fillOpacity={isSel ? 1 : +(0.95 - t * 0.25).toFixed(3)}
-                stroke={isSel ? "#7dd3fc" : "hsl(280, 100%, 85%)"}
-                strokeOpacity={isSel ? 1 : +(0.4 - t * 0.25).toFixed(3)}
-                strokeWidth={isSel ? 1 : 0.4}
+                fillOpacity={isSel ? 1 : statusColor ? 1 : +(0.95 - t * 0.25).toFixed(3)}
+                stroke={isSel ? "#7dd3fc" : statusColor ? "#000" : "hsl(280, 100%, 85%)"}
+                strokeOpacity={isSel ? 1 : statusColor ? 0.5 : +(0.4 - t * 0.25).toFixed(3)}
+                strokeWidth={isSel ? 1 : statusColor ? 0.6 : 0.4}
                 filter="url(#glow)"
                 onMouseEnter={() => setHover(n)}
                 onMouseLeave={() => setHover(null)}
@@ -293,8 +303,20 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange 
         holy tree · {tree.nodes.size} nodes · depth {base.maxDepth} · {view.scale.toFixed(2)}×
       </div>
 
+      {nodeStatus && (
+        <div className="pointer-events-none absolute right-3 bottom-3 flex flex-col gap-1 rounded border border-border bg-background/85 px-2 py-1.5 font-mono text-[10px] uppercase tracking-wider text-foreground backdrop-blur">
+          <div className="text-muted-foreground">engine status</div>
+          {(["normal", "surcharge", "flooding"] as const).map((k) => (
+            <div key={k} className="flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: STATUS_COLORS[k] }} />
+              {k}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Zoom controls */}
-      <div className="absolute bottom-3 right-3 flex flex-col gap-1">
+      <div className={`absolute right-3 flex flex-col gap-1 ${nodeStatus ? "bottom-24" : "bottom-3"}`}>
         <button
           onClick={() => zoomBy(1.4)}
           className="h-8 w-8 rounded border border-border bg-background/70 font-mono text-sm text-foreground backdrop-blur hover:bg-background"
