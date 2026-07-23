@@ -19,8 +19,15 @@ import {
   Legend,
 } from "recharts";
 import { startEngine, type EngineResult, type EngineRunHandle } from "@/lib/swmm/engine";
-import { parseRptSummary } from "@/lib/swmm/rpt";
+import { parseRptSummary, type RptSummary } from "@/lib/swmm/rpt";
 import type { BuildResult, InpOptions } from "@/lib/swmm/inp";
+import {
+  defaultThresholds,
+  toneForContinuity,
+  toneForFlooded,
+  toneForSurcharge,
+  type Thresholds,
+} from "@/lib/thresholds";
 
 interface Props {
   built: BuildResult;
@@ -28,11 +35,21 @@ interface Props {
   selectedNodes?: Set<number> | null;
   result?: EngineResult | null;
   onResult?: (r: EngineResult | null) => void;
+  thresholds?: Thresholds;
+  onRunComplete?: (built: BuildResult, opts: InpOptions, result: EngineResult, metrics: RptSummary) => void;
 }
 
 type Metric = "depth" | "inflow" | "linkflow" | "system";
 
-export function EngineRunner({ built, opts, selectedNodes, result: resultProp, onResult }: Props) {
+export function EngineRunner({
+  built,
+  opts,
+  selectedNodes,
+  result: resultProp,
+  onResult,
+  thresholds = defaultThresholds,
+  onRunComplete,
+}: Props) {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -58,7 +75,16 @@ export function EngineRunner({ built, opts, selectedNodes, result: resultProp, o
     });
     handleRef.current = handle;
     handle.promise
-      .then((r) => setResult(r))
+      .then((r) => {
+        setResult(r);
+        if (onRunComplete) {
+          try {
+            onRunComplete(built, opts, r, parseRptSummary(r.rpt));
+          } catch {
+            /* ignore history save errors */
+          }
+        }
+      })
       .catch((e) => setErr((e as Error).message))
       .finally(() => {
         window.clearInterval(tick);
@@ -308,22 +334,22 @@ export function EngineRunner({ built, opts, selectedNodes, result: resultProp, o
           <MetricCard
             label="Flow continuity"
             value={runSummary.flowContinuityPct != null ? runSummary.flowContinuityPct.toFixed(3) + " %" : "—"}
-            tone={runSummary.flowContinuityPct != null && Math.abs(runSummary.flowContinuityPct) > 10 ? "bad" : Math.abs(runSummary.flowContinuityPct ?? 0) > 1 ? "warn" : "ok"}
+            tone={toneForContinuity(runSummary.flowContinuityPct, thresholds, "flow")}
           />
           <MetricCard
             label="Runoff continuity"
             value={runSummary.runoffContinuityPct != null ? runSummary.runoffContinuityPct.toFixed(3) + " %" : "—"}
-            tone={runSummary.runoffContinuityPct != null && Math.abs(runSummary.runoffContinuityPct) > 10 ? "bad" : "ok"}
+            tone={toneForContinuity(runSummary.runoffContinuityPct, thresholds, "runoff")}
           />
           <MetricCard
             label="Flooded nodes"
             value={String(runSummary.floodedNodes.length)}
-            tone={runSummary.floodedNodes.length > 0 ? "warn" : "ok"}
+            tone={toneForFlooded(runSummary.floodedNodes.length, thresholds)}
           />
           <MetricCard
             label="Max surcharge"
             value={runSummary.maxSurchargeHours != null ? runSummary.maxSurchargeHours.toFixed(2) + " h" : "0 h"}
-            tone={(runSummary.maxSurchargeHours ?? 0) > 0 ? "warn" : "ok"}
+            tone={toneForSurcharge(runSummary.maxSurchargeHours, thresholds)}
           />
           <MetricCard
             label="Analysis errors"
@@ -472,8 +498,9 @@ export function EngineRunner({ built, opts, selectedNodes, result: resultProp, o
   );
 }
 
-function MetricCard({ label, value, tone }: { label: string; value: string; tone: "ok" | "warn" | "bad" }) {
-  const color = tone === "bad" ? "#ef4444" : tone === "warn" ? "#f59e0b" : "#10b981";
+function MetricCard({ label, value, tone }: { label: string; value: string; tone: "ok" | "warn" | "bad" | "muted" }) {
+  const color =
+    tone === "bad" ? "#ef4444" : tone === "warn" ? "#f59e0b" : tone === "ok" ? "#10b981" : "hsl(var(--muted-foreground))";
   return (
     <div className="rounded-md border border-border bg-card px-3 py-2">
       <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>

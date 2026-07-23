@@ -9,10 +9,16 @@ import { HolyTreeCanvas } from "@/components/HolyTreeCanvas";
 import { HglView } from "@/components/HglView";
 import { EngineRunner } from "@/components/EngineRunner";
 import { DocsView } from "@/components/DocsView";
-import { buildInp, defaultOptions, type InpOptions } from "@/lib/swmm/inp";
+import { RunHistoryPanel } from "@/components/RunHistoryPanel";
+import { BatchRunner } from "@/components/BatchRunner";
+import { buildInp, defaultOptions, type BuildResult, type InpOptions } from "@/lib/swmm/inp";
 import { validateInp } from "@/lib/swmm/validate";
 import { buildGeoJson } from "@/lib/swmm/geojson";
 import { ThemeProvider, useTheme } from "@/lib/theme";
+import { useThresholds } from "@/lib/thresholds";
+import { makeHistoryEntry, useRunHistory } from "@/lib/runHistory";
+import type { EngineResult } from "@/lib/swmm/engine";
+import type { RptSummary } from "@/lib/swmm/rpt";
 
 
 export const Route = createFileRoute("/")({
@@ -60,9 +66,31 @@ function ThemeToggle() {
 function Page() {
   const [opts, setOpts] = useState<InpOptions>(defaultOptions);
   const [selectedNodes, setSelectedNodes] = useState<Set<number> | null>(null);
-  const [engineResult, setEngineResult] = useState<import("@/lib/swmm/engine").EngineResult | null>(null);
+  const [engineResult, setEngineResult] = useState<EngineResult | null>(null);
+  const [tab, setTab] = useState<string>("visual");
   const built = useMemo(() => buildInp(opts), [opts]);
   const validation = useMemo(() => validateInp(opts, built), [opts, built]);
+  const [thresholds, setThresholds, resetThresholds] = useThresholds();
+  const history = useRunHistory();
+
+  const handleRunComplete = useCallback(
+    (b: BuildResult, o: InpOptions, r: EngineResult, m: RptSummary) => {
+      const entry = makeHistoryEntry(o, b, r, m);
+      history.add(entry, r);
+    },
+    [history],
+  );
+
+  const reopenRun = useCallback(
+    (id: string) => {
+      const r = history.getResult(id);
+      if (r) {
+        setEngineResult(r);
+        setTab("engine");
+      }
+    },
+    [history],
+  );
 
   const nodeStatus = useMemo(() => {
     if (!engineResult) return null;
@@ -200,12 +228,14 @@ function Page() {
           </aside>
 
           <section>
-            <Tabs defaultValue="visual">
+            <Tabs value={tab} onValueChange={setTab}>
               <TabsList>
                 <TabsTrigger value="visual">Visual <Badge tone="ok">GENERATED</Badge></TabsTrigger>
                 <TabsTrigger value="hgl">HGL <Badge tone={engineResult ? "ok" : "warn"}>{engineResult ? "ENGINE" : "GEOMETRY PREVIEW"}</Badge></TabsTrigger>
                 <TabsTrigger value="inp">INP text <Badge tone="ok">GENERATED</Badge></TabsTrigger>
                 <TabsTrigger value="engine">Engine <Badge tone={engineResult ? "ok" : "warn"}>{engineResult ? `SWMM5 · ${engineResult.engine.toUpperCase()}` : "WASM READY"}</Badge></TabsTrigger>
+                <TabsTrigger value="batch">Batch</TabsTrigger>
+                <TabsTrigger value="history">History {history.entries.length > 0 && <Badge tone="ok">{history.entries.length}</Badge>}</TabsTrigger>
                 <TabsTrigger value="docs">Docs</TabsTrigger>
               </TabsList>
               <TabsContent value="visual" className="mt-3">
@@ -250,6 +280,33 @@ function Page() {
                     selectedNodes={selectedNodes}
                     result={engineResult}
                     onResult={setEngineResult}
+                    thresholds={thresholds}
+                    onRunComplete={handleRunComplete}
+                  />
+                </div>
+              </TabsContent>
+              <TabsContent value="batch" className="mt-3">
+                <div className="h-[75vh] min-h-[520px]">
+                  <BatchRunner
+                    baseOpts={opts}
+                    thresholds={thresholds}
+                    onSaveHistory={(entry, result) => history.add(entry, result)}
+                    onReopen={reopenRun}
+                    hasStoredResult={(id) => !!history.getResult(id)}
+                  />
+                </div>
+              </TabsContent>
+              <TabsContent value="history" className="mt-3">
+                <div className="h-[75vh] min-h-[520px]">
+                  <RunHistoryPanel
+                    entries={history.entries}
+                    onReopen={reopenRun}
+                    onRemove={history.remove}
+                    onClear={history.clear}
+                    hasStoredResult={(id) => !!history.getResult(id)}
+                    thresholds={thresholds}
+                    setThresholds={setThresholds}
+                    resetThresholds={resetThresholds}
                   />
                 </div>
               </TabsContent>
