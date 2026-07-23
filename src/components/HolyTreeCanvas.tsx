@@ -316,7 +316,7 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange,
       )}
 
       {/* Zoom controls */}
-      <div className="absolute bottom-3 right-3 flex flex-col gap-1">
+      <div className={`absolute right-3 flex flex-col gap-1 ${nodeStatus ? "bottom-24" : "bottom-3"}`}>
         <button
           onClick={() => zoomBy(1.4)}
           className="h-8 w-8 rounded border border-border bg-background/70 font-mono text-sm text-foreground backdrop-blur hover:bg-background"
