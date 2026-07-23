@@ -8,9 +8,16 @@ interface Props {
   coords: Map<number, [number, number]>;
   selectedNodes?: Set<number> | null;
   onSelectionChange?: (nodes: Set<number> | null) => void;
+  nodeStatus?: Map<number, "normal" | "surcharge" | "flooding"> | null;
 }
 
-export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange }: Props) {
+const STATUS_COLORS = {
+  normal: "#10b981",
+  surcharge: "#f59e0b",
+  flooding: "#ef4444",
+} as const;
+
+export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange, nodeStatus }: Props) {
   const [hover, setHover] = useState<number | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
