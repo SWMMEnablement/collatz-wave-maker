@@ -184,18 +184,25 @@ function Page() {
               </p>
             )}
 
-            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-              engine: stub · wasm slot: /public/wasm/
-            </p>
+            <div className="rounded-md border border-border bg-card/60 p-3 space-y-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              <div>seeds: <span className="text-primary">{built.seedCount}</span> (2..{opts.maxSeed})</div>
+              <div>generated junctions: <span className="text-primary">{built.generatedCount}</span></div>
+              <div>leaves: <span className="text-primary">{built.leafCount}</span></div>
+              <div>inflow @ {opts.inflowScope}: <span className="text-primary">{built.inflowNodes.length}</span> nodes</div>
+              {opts.subcatchments && (
+                <div>subs @ {opts.subcatchmentScope}: <span className="text-primary">{built.subcatchmentCount}</span> · {built.effectiveSubArea.toFixed(3)} {opts.flowUnits === "CFS" ? "ac" : "ha"} ea</div>
+              )}
+              <div className="pt-1">engine: <span className="text-accent">stub</span> · wasm: /public/wasm/</div>
+            </div>
           </aside>
 
           <section>
             <Tabs defaultValue="visual">
               <TabsList>
-                <TabsTrigger value="visual">Visual</TabsTrigger>
-                <TabsTrigger value="hgl">HGL</TabsTrigger>
-                <TabsTrigger value="inp">INP text</TabsTrigger>
-                <TabsTrigger value="engine">Engine</TabsTrigger>
+                <TabsTrigger value="visual">Visual <Badge tone="ok">GENERATED</Badge></TabsTrigger>
+                <TabsTrigger value="hgl">HGL <Badge tone={engineResult ? "ok" : "warn"}>{engineResult ? "ENGINE" : "GEOMETRY PREVIEW"}</Badge></TabsTrigger>
+                <TabsTrigger value="inp">INP text <Badge tone="ok">GENERATED</Badge></TabsTrigger>
+                <TabsTrigger value="engine">Engine <Badge tone="err">NOT INSTALLED</Badge></TabsTrigger>
                 <TabsTrigger value="docs">Docs</TabsTrigger>
               </TabsList>
               <TabsContent value="visual" className="mt-3">
