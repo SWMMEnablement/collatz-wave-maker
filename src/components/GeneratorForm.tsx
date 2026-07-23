@@ -189,7 +189,37 @@ export function GeneratorForm({ value, onChange }: Props) {
         <Field label="DWF baseflow / node"><Input type="number" step="0.01" value={value.dwfBaseflow} onChange={num("dwfBaseflow")} /></Field>
         <Field label="DWF pattern (opt.)"><Input type="text" value={value.dwfPattern} onChange={(e) => set("dwfPattern", e.target.value)} /></Field>
       </div>
+
+      {/* Progressive conduit sizing */}
+      <div className="space-y-2 rounded-md border border-border bg-card/60 p-3">
+        <label className="flex items-center justify-between gap-2">
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">
+            Progressive conduit sizing
+          </span>
+          <input
+            type="checkbox"
+            checked={value.progressiveSizing}
+            onChange={(e) => set("progressiveSizing", e.target.checked)}
+            className="h-4 w-4 accent-[var(--color-primary)]"
+          />
+        </label>
+        <p className="text-[11px] text-muted-foreground">
+          Scale conduit diameter by √(upstream nodes), so pipes near the outfall grow with accumulated flow.
+        </p>
+        {value.progressiveSizing && (
+          <Field label={`Max diameter multiplier (×${value.maxDiameterMultiplier})`}>
+            <Slider
+              min={1}
+              max={20}
+              step={0.5}
+              value={[value.maxDiameterMultiplier]}
+              onValueChange={([v]) => set("maxDiameterMultiplier", v)}
+            />
+          </Field>
+        )}
+      </div>
     </div>
+
   );
 }
 
