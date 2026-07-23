@@ -41,7 +41,15 @@ interface Props {
 
 type Metric = "depth" | "inflow" | "linkflow" | "system";
 
-export function EngineRunner({ built, opts, selectedNodes, result: resultProp, onResult }: Props) {
+export function EngineRunner({
+  built,
+  opts,
+  selectedNodes,
+  result: resultProp,
+  onResult,
+  thresholds = defaultThresholds,
+  onRunComplete,
+}: Props) {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -67,7 +75,16 @@ export function EngineRunner({ built, opts, selectedNodes, result: resultProp, o
     });
     handleRef.current = handle;
     handle.promise
-      .then((r) => setResult(r))
+      .then((r) => {
+        setResult(r);
+        if (onRunComplete) {
+          try {
+            onRunComplete(built, opts, r, parseRptSummary(r.rpt));
+          } catch {
+            /* ignore history save errors */
+          }
+        }
+      })
       .catch((e) => setErr((e as Error).message))
       .finally(() => {
         window.clearInterval(tick);
