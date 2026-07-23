@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { GeneratorForm } from "@/components/GeneratorForm";
@@ -9,6 +10,8 @@ import { HglView } from "@/components/HglView";
 import { EngineRunner } from "@/components/EngineRunner";
 import { DocsView } from "@/components/DocsView";
 import { buildInp, defaultOptions, type InpOptions } from "@/lib/swmm/inp";
+import { validateInp } from "@/lib/swmm/validate";
+import { ThemeProvider, useTheme } from "@/lib/theme";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -26,15 +29,39 @@ export const Route = createFileRoute("/")({
       },
     ],
   }),
-  component: Page,
+  component: PageWrapper,
 });
+
+function PageWrapper() {
+  return (
+    <ThemeProvider>
+      <Page />
+    </ThemeProvider>
+  );
+}
+
+function ThemeToggle() {
+  const { theme, toggle } = useTheme();
+  return (
+    <Button
+      variant="outline"
+      size="icon"
+      onClick={toggle}
+      aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+      title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+    >
+      {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+    </Button>
+  );
+}
 
 function Page() {
   const [opts, setOpts] = useState<InpOptions>(defaultOptions);
   const [selectedNodes, setSelectedNodes] = useState<Set<number> | null>(null);
   const built = useMemo(() => buildInp(opts), [opts]);
+  const validation = useMemo(() => validateInp(opts, built), [opts, built]);
 
-  const download = () => {
+  const download = useCallback(() => {
     const blob = new Blob([built.inp], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -42,18 +69,23 @@ function Page() {
     a.download = `collatz_holy_tree_n${opts.maxSeed}.inp`;
     a.click();
     URL.revokeObjectURL(url);
-  };
+  }, [built.inp, opts.maxSeed]);
 
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-7xl px-6 py-10">
         <header className="mb-10 border-b border-border pb-6">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">
-            Holy Tree · SWMM5
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight md:text-4xl">
-            Collatz <span className="text-primary">→</span> SWMM5 .inp generator
-          </h1>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">
+                Holy Tree · SWMM5
+              </p>
+              <h1 className="mt-2 text-3xl font-semibold tracking-tight md:text-4xl">
+                Collatz <span className="text-primary">→</span> SWMM5 .inp generator
+              </h1>
+            </div>
+            <ThemeToggle />
+          </div>
           <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
             Every integer in 1..N becomes a junction. Every Collatz step
             (n/2 or 3n+1) becomes a conduit. Node 1 is the outfall — all
@@ -72,9 +104,20 @@ function Page() {
         <div className="grid gap-8 lg:grid-cols-[360px_1fr]">
           <aside className="space-y-6">
             <GeneratorForm value={opts} onChange={setOpts} />
-            <Button onClick={download} className="w-full" size="lg">
+            <Button
+              onClick={download}
+              className="w-full"
+              size="lg"
+              disabled={!validation.ok}
+              title={validation.ok ? "Download .inp" : "Fix validation errors before downloading"}
+            >
               Download .inp
             </Button>
+            {!validation.ok && (
+              <p className="text-xs text-destructive">
+                {validation.errors} validation error{validation.errors === 1 ? "" : "s"} — see INP tab.
+              </p>
+            )}
             <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
               engine: stub · wasm slot: /public/wasm/
             </p>
@@ -110,6 +153,10 @@ function Page() {
                     inp={built.inp}
                     nodeCount={built.nodeCount}
                     conduitCount={built.conduitCount}
+                    opts={opts}
+                    endTimeSec={built.endTimeSec}
+                    validation={validation}
+                    onDownload={download}
                   />
                 </div>
               </TabsContent>
