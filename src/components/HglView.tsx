@@ -21,9 +21,27 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
   const [hover, setHover] = useState<number | null>(null);
   const hasEngine = !!engineResult && engineResult.times.length > 0;
   const [timeIdx, setTimeIdx] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(1);
   const activeIdx = hasEngine
     ? Math.min(timeIdx, engineResult!.times.length - 1)
     : 0;
+
+  useEffect(() => {
+    if (!playing || !hasEngine) return;
+    const total = engineResult!.times.length;
+    const id = window.setInterval(() => {
+      setTimeIdx((i) => {
+        const next = i + 1;
+        if (next >= total) {
+          setPlaying(false);
+          return total - 1;
+        }
+        return next;
+      });
+    }, Math.max(30, 200 / speed));
+    return () => window.clearInterval(id);
+  }, [playing, hasEngine, engineResult, speed]);
 
   const depthByNode = useMemo(() => {
     const m = new Map<number, number>();
