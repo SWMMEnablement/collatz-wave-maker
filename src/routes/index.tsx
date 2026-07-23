@@ -179,6 +179,7 @@ function Page() {
                     coords={built.coords}
                     selectedNodes={selectedNodes}
                     onSelectionChange={setSelectedNodes}
+                    nodeStatus={nodeStatus}
                   />
                 </div>
               </TabsContent>
