@@ -19,6 +19,7 @@ import {
   Legend,
 } from "recharts";
 import { startEngine, type EngineResult, type EngineRunHandle } from "@/lib/swmm/engine";
+import { parseRptSummary } from "@/lib/swmm/rpt";
 import type { BuildResult, InpOptions } from "@/lib/swmm/inp";
 
 interface Props {
