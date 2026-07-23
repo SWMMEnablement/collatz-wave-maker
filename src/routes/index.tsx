@@ -262,3 +262,25 @@ function Page() {
     </main>
   );
 }
+
+const PRESETS: Array<{ label: string; title: string; patch: Partial<InpOptions> }> = [
+  { label: "N=10",    title: "Tiny network — 20 nodes, quick preview",         patch: { maxSeed: 10 } },
+  { label: "N=27",    title: "Classic Collatz record (seed 27 → 111 steps)",   patch: { maxSeed: 27 } },
+  { label: "N=100",   title: "Default — 251 generated junctions",              patch: { maxSeed: 100 } },
+  { label: "N=1000",  title: "Big network — ~2k nodes",                        patch: { maxSeed: 1000 } },
+  { label: "Stress",  title: "Stress test — 5000 seeds, may slow rendering",   patch: { maxSeed: 5000 } },
+];
+
+function Badge({ tone, children }: { tone: "ok" | "warn" | "err"; children: React.ReactNode }) {
+  const cls =
+    tone === "ok"
+      ? "border-primary/40 bg-primary/10 text-primary"
+      : tone === "warn"
+      ? "border-accent/50 bg-accent/10 text-accent"
+      : "border-destructive/50 bg-destructive/10 text-destructive";
+  return (
+    <span className={`ml-2 rounded-sm border px-1 py-0.5 font-mono text-[8px] uppercase tracking-wider ${cls}`}>
+      {children}
+    </span>
+  );
+}
