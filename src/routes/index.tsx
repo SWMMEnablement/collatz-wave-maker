@@ -64,6 +64,21 @@ function Page() {
   const built = useMemo(() => buildInp(opts), [opts]);
   const validation = useMemo(() => validateInp(opts, built), [opts, built]);
 
+  const nodeStatus = useMemo(() => {
+    if (!engineResult) return null;
+    const m = new Map<number, "normal" | "surcharge" | "flooding">();
+    const cap = opts.maxDepth;
+    for (const s of engineResult.series) {
+      let mx = 0;
+      for (const d of s.depth) if (d > mx) mx = d;
+      let status: "normal" | "surcharge" | "flooding" = "normal";
+      if (mx >= cap * 1.02) status = "flooding";
+      else if (mx >= cap * 0.98) status = "surcharge";
+      m.set(s.node, status);
+    }
+    return m;
+  }, [engineResult, opts.maxDepth]);
+
   const download = useCallback(() => {
     const blob = new Blob([built.inp], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
