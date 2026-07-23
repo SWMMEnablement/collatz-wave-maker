@@ -303,6 +303,18 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange,
         holy tree · {tree.nodes.size} nodes · depth {base.maxDepth} · {view.scale.toFixed(2)}×
       </div>
 
+      {nodeStatus && (
+        <div className="pointer-events-none absolute right-3 bottom-3 flex flex-col gap-1 rounded border border-border bg-background/85 px-2 py-1.5 font-mono text-[10px] uppercase tracking-wider text-foreground backdrop-blur">
+          <div className="text-muted-foreground">engine status</div>
+          {(["normal", "surcharge", "flooding"] as const).map((k) => (
+            <div key={k} className="flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: STATUS_COLORS[k] }} />
+              {k}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Zoom controls */}
       <div className="absolute bottom-3 right-3 flex flex-col gap-1">
         <button
