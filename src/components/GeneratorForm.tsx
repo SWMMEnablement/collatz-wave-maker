@@ -310,21 +310,67 @@ export function GeneratorForm({ value, onChange }: Props) {
         <p className="text-[11px] text-muted-foreground">
           Drops one subcatchment per junction (outlet = the junction) so rainfall turns into runoff.
         </p>
+        <p className="text-[11px] text-muted-foreground">
+          Runoff drains via each subcatchment's outlet junction.
+        </p>
         {value.subcatchments && (
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={`Area / sub (${value.flowUnits === "CFS" ? "ac" : "ha"})`}>
-              <Input type="number" step="0.1" min={0} value={value.subcatchmentArea} onChange={num("subcatchmentArea")} />
+          <>
+            <Field label="Create catchments at">
+              <Select
+                value={value.subcatchmentScope}
+                onValueChange={(v) => set("subcatchmentScope", v as InpOptions["subcatchmentScope"])}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="seeds">Original seed nodes (2..N)</SelectItem>
+                  <SelectItem value="leaves">Leaf junctions only</SelectItem>
+                  <SelectItem value="all">Every generated junction</SelectItem>
+                </SelectContent>
+              </Select>
             </Field>
-            <Field label="% Impervious">
-              <Input type="number" step="1" min={0} max={100} value={value.imperviousPct} onChange={num("imperviousPct")} />
+            <Field label="Area mode">
+              <Select
+                value={value.subAreaMode}
+                onValueChange={(v) => set("subAreaMode", v as InpOptions["subAreaMode"])}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fixed-total">
+                    <div className="flex flex-col">
+                      <span>Fixed total area (split evenly)</span>
+                      <span className="text-xs text-muted-foreground">Total watershed size stays constant across N.</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="per-sub">
+                    <div className="flex flex-col">
+                      <span>Fixed area per catchment</span>
+                      <span className="text-xs text-muted-foreground">Watershed grows with the number of catchments.</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             </Field>
-            <Field label={`Width (${value.flowUnits === "CFS" ? "ft" : "m"})`}>
-              <Input type="number" step="10" min={0} value={value.subWidth} onChange={num("subWidth")} />
-            </Field>
-            <Field label="Slope %">
-              <Input type="number" step="0.1" min={0} value={value.subSlope} onChange={num("subSlope")} />
-            </Field>
-          </div>
+            <div className="grid grid-cols-2 gap-3">
+              {value.subAreaMode === "per-sub" ? (
+                <Field label={`Area / sub (${value.flowUnits === "CFS" ? "ac" : "ha"})`}>
+                  <Input type="number" step="0.1" min={0} value={value.subcatchmentArea} onChange={num("subcatchmentArea")} />
+                </Field>
+              ) : (
+                <Field label={`Total area (${value.flowUnits === "CFS" ? "ac" : "ha"})`}>
+                  <Input type="number" step="1" min={0} value={value.subTotalArea} onChange={num("subTotalArea")} />
+                </Field>
+              )}
+              <Field label="% Impervious">
+                <Input type="number" step="1" min={0} max={100} value={value.imperviousPct} onChange={num("imperviousPct")} />
+              </Field>
+              <Field label={`Width (${value.flowUnits === "CFS" ? "ft" : "m"})`}>
+                <Input type="number" step="10" min={0} value={value.subWidth} onChange={num("subWidth")} />
+              </Field>
+              <Field label="Slope %">
+                <Input type="number" step="0.1" min={0} value={value.subSlope} onChange={num("subSlope")} />
+              </Field>
+            </div>
+          </>
         )}
       </div>
     </div>
