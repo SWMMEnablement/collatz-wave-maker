@@ -11,7 +11,9 @@ import { EngineRunner } from "@/components/EngineRunner";
 import { DocsView } from "@/components/DocsView";
 import { buildInp, defaultOptions, type InpOptions } from "@/lib/swmm/inp";
 import { validateInp } from "@/lib/swmm/validate";
+import { buildGeoJson } from "@/lib/swmm/geojson";
 import { ThemeProvider, useTheme } from "@/lib/theme";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
