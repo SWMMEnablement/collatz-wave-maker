@@ -581,7 +581,7 @@ export function buildInp(opts: InpOptions): BuildResult {
     // small square polygon around each junction
     const sz = Math.max(0.5, 2 * opts.coordScale * 20);
     for (const n of tree.nodes) {
-      if (n === 1) continue;
+      if (!subSet.has(n)) continue;
       const [x, y] = coords.get(n) ?? [0, 0];
       const corners: Array<[number, number]> = [
         [x - sz, y - sz], [x + sz, y - sz], [x + sz, y + sz], [x - sz, y + sz],
@@ -608,5 +608,11 @@ export function buildInp(opts: InpOptions): BuildResult {
     conduitDiameter,
     storm,
     subcatchmentCount,
+    seedCount,
+    leafCount,
+    generatedCount,
+    inflowNodes,
+    subcatchmentNodes: Array.from(subSet),
+    effectiveSubArea,
   };
 }
