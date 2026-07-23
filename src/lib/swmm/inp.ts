@@ -111,13 +111,18 @@ export const defaultOptions: InpOptions = {
   trapPlateauFrac: 0.5,
   trapFallFrac: 0.25,
 
+  inflowScope: "seeds",
+
   stormType: "none",
   stormDepth: 2.0,
   stormDurationHr: 6,
   rainIntervalMin: 15,
 
   subcatchments: false,
+  subcatchmentScope: "seeds",
+  subAreaMode: "fixed-total",
   subcatchmentArea: 1.0,
+  subTotalArea: 100,
   imperviousPct: 40,
   subWidth: 500,
   subSlope: 1.0,
