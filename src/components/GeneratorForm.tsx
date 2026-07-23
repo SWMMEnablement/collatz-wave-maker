@@ -8,7 +8,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { InpOptions } from "@/lib/swmm/inp";
+import {
+  type InpOptions,
+  TRAPEZOID_PRESETS,
+  detectTrapezoidPreset,
+  type TrapezoidPresetKey,
+} from "@/lib/swmm/inp";
 import { LAYOUT_OPTIONS } from "@/lib/swmm/layout";
 
 interface Props {
@@ -22,6 +27,22 @@ export function GeneratorForm({ value, onChange }: Props) {
 
   const num = (k: keyof InpOptions) => (e: React.ChangeEvent<HTMLInputElement>) =>
     set(k, Number(e.target.value) as never);
+
+  const currentPreset = detectTrapezoidPreset(value);
+  const applyPreset = (key: TrapezoidPresetKey) => {
+    if (key === "custom") return;
+    const p = TRAPEZOID_PRESETS.find((x) => x.key === key);
+    if (!p) return;
+    onChange({
+      ...value,
+      trapRiseFrac: p.rise,
+      trapPlateauFrac: p.plateau,
+      trapFallFrac: p.fall,
+    });
+  };
+
+  const fracSum = value.trapRiseFrac + value.trapPlateauFrac + value.trapFallFrac;
+  const endH = value.endTimeSec / 3600;
 
   return (
     <div className="space-y-6">
@@ -75,7 +96,7 @@ export function GeneratorForm({ value, onChange }: Props) {
           <span className="font-mono text-sm text-primary">
             {value.endTimeSec}s
             <span className="ml-2 text-muted-foreground">
-              ({(value.endTimeSec / 3600).toFixed(2)} h)
+              ({endH.toFixed(2)} h)
             </span>
           </span>
         </div>
@@ -96,6 +117,55 @@ export function GeneratorForm({ value, onChange }: Props) {
         <p className="text-xs text-muted-foreground">Minimum 12 h so the trapezoidal inflow develops fully.</p>
       </div>
 
+      {/* Trapezoidal inflow shape controls */}
+      <div className="space-y-3 rounded-md border border-border bg-card/60 p-3">
+        <div className="flex items-center justify-between">
+          <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+            Trapezoidal inflow shape
+          </Label>
+          <span className="font-mono text-[10px] uppercase text-primary">
+            {currentPreset}
+          </span>
+        </div>
+        <Select value={currentPreset} onValueChange={(v) => applyPreset(v as TrapezoidPresetKey)}>
+          <SelectTrigger><SelectValue placeholder="Preset" /></SelectTrigger>
+          <SelectContent>
+            {TRAPEZOID_PRESETS.map((p) => (
+              <SelectItem key={p.key} value={p.key}>
+                <div className="flex flex-col">
+                  <span>{p.label}</span>
+                  <span className="text-xs text-muted-foreground">{p.description}</span>
+                </div>
+              </SelectItem>
+            ))}
+            <SelectItem value="custom">Custom (below)</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <FracSlider
+          label="Rise"
+          value={value.trapRiseFrac}
+          onChange={(v) => set("trapRiseFrac", v)}
+          endH={endH}
+        />
+        <FracSlider
+          label="Plateau"
+          value={value.trapPlateauFrac}
+          onChange={(v) => set("trapPlateauFrac", v)}
+          endH={endH}
+        />
+        <FracSlider
+          label="Fall"
+          value={value.trapFallFrac}
+          onChange={(v) => set("trapFallFrac", v)}
+          endH={endH}
+        />
+        <p className={`text-[11px] font-mono ${Math.abs(fracSum - 1) < 0.01 ? "text-muted-foreground" : fracSum > 1 ? "text-destructive" : "text-accent"}`}>
+          Σ = {fracSum.toFixed(2)} of sim length
+          {fracSum > 1 ? " — over 100% (invalid)" : fracSum < 0.99 ? " — tail holds at 0" : ""}
+        </p>
+      </div>
+
       <Field label="Peak inflow / node">
         <Input type="number" step="0.1" value={value.peakInflow} onChange={num("peakInflow")} />
       </Field>
@@ -113,6 +183,38 @@ export function GeneratorForm({ value, onChange }: Props) {
         <Field label="DWF baseflow / node"><Input type="number" step="0.01" value={value.dwfBaseflow} onChange={num("dwfBaseflow")} /></Field>
         <Field label="DWF pattern (opt.)"><Input type="text" value={value.dwfPattern} onChange={(e) => set("dwfPattern", e.target.value)} /></Field>
       </div>
+    </div>
+  );
+}
+
+function FracSlider({
+  label,
+  value,
+  onChange,
+  endH,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  endH: number;
+}) {
+  const hours = value * endH;
+  return (
+    <div className="space-y-1">
+      <div className="flex items-baseline justify-between text-xs">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="font-mono text-primary">
+          {(value * 100).toFixed(0)}%{" "}
+          <span className="text-muted-foreground">({hours.toFixed(2)} h)</span>
+        </span>
+      </div>
+      <Slider
+        min={0}
+        max={1}
+        step={0.01}
+        value={[Math.max(0, Math.min(1, value))]}
+        onValueChange={([v]) => onChange(v)}
+      />
     </div>
   );
 }
