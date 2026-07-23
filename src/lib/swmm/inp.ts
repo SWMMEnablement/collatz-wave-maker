@@ -249,14 +249,22 @@ export interface BuildResult {
   coords: Map<number, [number, number]>;
   inverts: Map<number, number>;
   endTimeSec: number;
-  /** Upstream contributing node count per node (inclusive of the node itself). */
   upstreamCount: Map<number, number>;
-  /** Diameter assigned to each conduit id (e.g. "C1", "C2", ...). */
   conduitDiameter: Map<string, number>;
-  /** Storm hyetograph (minute, intensity) pairs — empty if stormType===none. */
   storm: Array<[number, number]>;
-  /** Number of auto-generated subcatchments. */
   subcatchmentCount: number;
+  /** User seeds actually present in the network (should equal maxSeed). */
+  seedCount: number;
+  /** Nodes with no upstream neighbours (Collatz-tree leaves, excluding outfall). */
+  leafCount: number;
+  /** All non-outfall junctions (seeds + intermediate trajectory nodes). */
+  generatedCount: number;
+  /** Node ids that received the trapezoidal INFLOW hydrograph. */
+  inflowNodes: number[];
+  /** Node ids that got an auto-generated subcatchment. */
+  subcatchmentNodes: number[];
+  /** Effective per-sub area in ac/ha after applying subAreaMode. */
+  effectiveSubArea: number;
 }
 
 
