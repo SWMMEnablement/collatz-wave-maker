@@ -103,12 +103,12 @@ export function EngineRunner({ built, selectedNodes, result: resultProp, onResul
       for (const d of s.depth) if (d > mx) mx = d;
       const invert = cap.get(s.node) ?? 0;
       const maxHGL = invert + mx;
-      const capacityHead = invert + built.opts.maxDepth;
-      const excess = Math.max(0, mx - built.opts.maxDepth);
+      const capacityHead = invert + opts.maxDepth;
+      const excess = Math.max(0, mx - opts.maxDepth);
       const status: "normal" | "surcharge" | "flooding" =
-        mx >= built.opts.maxDepth * 1.02
+        mx >= opts.maxDepth * 1.02
           ? "flooding"
-          : mx >= built.opts.maxDepth * 0.98
+          : mx >= opts.maxDepth * 0.98
             ? "surcharge"
             : "normal";
       return {
@@ -125,7 +125,7 @@ export function EngineRunner({ built, selectedNodes, result: resultProp, onResul
       engine: result.engine,
       durationMs: result.durationMs,
       steps: result.times.length,
-      pipeCapacity: built.opts.maxDepth,
+      pipeCapacity: opts.maxDepth,
       totals: {
         surcharge: rows.filter((r) => r.status === "surcharge").length,
         flooding: rows.filter((r) => r.status === "flooding").length,
@@ -146,11 +146,11 @@ export function EngineRunner({ built, selectedNodes, result: resultProp, onResul
         let mx = 0;
         for (const d of s.depth) if (d > mx) mx = d;
         const invert = built.inverts.get(s.node) ?? 0;
-        const capacityHead = invert + built.opts.maxDepth;
+        const capacityHead = invert + opts.maxDepth;
         const status: "normal" | "surcharge" | "flooding" =
-          mx >= built.opts.maxDepth * 1.02
+          mx >= opts.maxDepth * 1.02
             ? "flooding"
-            : mx >= built.opts.maxDepth * 0.98
+            : mx >= opts.maxDepth * 0.98
               ? "surcharge"
               : "normal";
         return {
@@ -159,7 +159,7 @@ export function EngineRunner({ built, selectedNodes, result: resultProp, onResul
           maxDepth: mx,
           maxHGL: invert + mx,
           capacityHead,
-          excess: Math.max(0, mx - built.opts.maxDepth),
+          excess: Math.max(0, mx - opts.maxDepth),
           status,
         };
       })
