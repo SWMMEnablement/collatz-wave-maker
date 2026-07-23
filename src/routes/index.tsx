@@ -195,7 +195,7 @@ function Page() {
               {opts.subcatchments && (
                 <div>subs @ {opts.subcatchmentScope}: <span className="text-primary">{built.subcatchmentCount}</span> · {built.effectiveSubArea.toFixed(3)} {opts.flowUnits === "CFS" ? "ac" : "ha"} ea</div>
               )}
-              <div className="pt-1">engine: <span className="text-accent">stub</span> · wasm: /public/wasm/</div>
+              <div className="pt-1">engine: <span className="text-primary">EPA SWMM 5.2 · WASM</span></div>
             </div>
           </aside>
 
