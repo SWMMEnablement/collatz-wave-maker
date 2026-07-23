@@ -9,10 +9,16 @@ import { HolyTreeCanvas } from "@/components/HolyTreeCanvas";
 import { HglView } from "@/components/HglView";
 import { EngineRunner } from "@/components/EngineRunner";
 import { DocsView } from "@/components/DocsView";
-import { buildInp, defaultOptions, type InpOptions } from "@/lib/swmm/inp";
+import { RunHistoryPanel } from "@/components/RunHistoryPanel";
+import { BatchRunner } from "@/components/BatchRunner";
+import { buildInp, defaultOptions, type BuildResult, type InpOptions } from "@/lib/swmm/inp";
 import { validateInp } from "@/lib/swmm/validate";
 import { buildGeoJson } from "@/lib/swmm/geojson";
 import { ThemeProvider, useTheme } from "@/lib/theme";
+import { useThresholds } from "@/lib/thresholds";
+import { makeHistoryEntry, useRunHistory } from "@/lib/runHistory";
+import type { EngineResult } from "@/lib/swmm/engine";
+import type { RptSummary } from "@/lib/swmm/rpt";
 
 
 export const Route = createFileRoute("/")({
