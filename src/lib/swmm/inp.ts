@@ -16,6 +16,47 @@ export interface InpOptions {
   endTimeSec: number;  // simulation duration in seconds (min 12 h = 43200)
   peakInflow: number;  // peak of trapezoidal inflow hydrograph at each junction
   coordScale: number;  // multiplier for all node coordinates
+  // Trapezoidal inflow shape as fractions of endTimeSec.
+  // rise + plateau + fall should sum to ≤ 1.0.
+  trapRiseFrac: number;
+  trapPlateauFrac: number;
+  trapFallFrac: number;
+}
+
+export type TrapezoidPresetKey =
+  | "symmetric"
+  | "storm-burst"
+  | "slow-build"
+  | "flash-flood"
+  | "long-plateau"
+  | "custom";
+
+export interface TrapezoidPreset {
+  key: TrapezoidPresetKey;
+  label: string;
+  description: string;
+  rise: number;
+  plateau: number;
+  fall: number;
+}
+
+export const TRAPEZOID_PRESETS: TrapezoidPreset[] = [
+  { key: "symmetric",    label: "Symmetric",       description: "25% rise · 50% plateau · 25% fall", rise: 0.25, plateau: 0.5,  fall: 0.25 },
+  { key: "storm-burst",  label: "Storm burst",     description: "10% rise · 20% plateau · 70% fall", rise: 0.10, plateau: 0.2,  fall: 0.70 },
+  { key: "slow-build",   label: "Slow build",      description: "40% rise · 20% plateau · 40% fall", rise: 0.40, plateau: 0.2,  fall: 0.40 },
+  { key: "flash-flood",  label: "Flash flood",     description: "5% rise · 10% plateau · 85% fall",  rise: 0.05, plateau: 0.10, fall: 0.85 },
+  { key: "long-plateau", label: "Long plateau",    description: "10% rise · 80% plateau · 10% fall", rise: 0.10, plateau: 0.80, fall: 0.10 },
+];
+
+export function detectTrapezoidPreset(opts: Pick<InpOptions, "trapRiseFrac" | "trapPlateauFrac" | "trapFallFrac">): TrapezoidPresetKey {
+  for (const p of TRAPEZOID_PRESETS) {
+    if (
+      Math.abs(p.rise - opts.trapRiseFrac) < 1e-3 &&
+      Math.abs(p.plateau - opts.trapPlateauFrac) < 1e-3 &&
+      Math.abs(p.fall - opts.trapFallFrac) < 1e-3
+    ) return p.key;
+  }
+  return "custom";
 }
 
 export const defaultOptions: InpOptions = {
@@ -33,7 +74,11 @@ export const defaultOptions: InpOptions = {
   endTimeSec: 43200, // 12 hours
   peakInflow: 1.0,
   coordScale: 0.05,
+  trapRiseFrac: 0.25,
+  trapPlateauFrac: 0.5,
+  trapFallFrac: 0.25,
 };
+
 
 function secsToHMS(s: number): string {
   const sec = Math.max(0, Math.floor(s));
@@ -194,12 +239,19 @@ export function buildInp(opts: InpOptions): BuildResult {
 
   push("[TIMESERIES]");
   push(";;Name           Date       Time       Value");
+  const rise = Math.max(0, opts.trapRiseFrac) * endH;
+  const plateau = Math.max(0, opts.trapPlateauFrac) * endH;
+  const fall = Math.max(0, opts.trapFallFrac) * endH;
   const tsRows: Array<[string, number]> = [
     [fmtH(0), 0],
-    [fmtH(endH * 0.25), peak],
-    [fmtH(endH * 0.75), peak],
-    [fmtH(endH), 0],
+    [fmtH(rise), peak],
+    [fmtH(rise + plateau), peak],
+    [fmtH(rise + plateau + fall), 0],
   ];
+  // If the shape ends before end-of-sim, hold zero at the end so SWMM has a bracket.
+  if (rise + plateau + fall < endH - 1e-6) {
+    tsRows.push([fmtH(endH), 0]);
+  }
   for (const [t, v] of tsRows) {
     push(`${pad(tsName, 17)}${pad(t, 11)}${v.toFixed(4)}`);
   }
@@ -239,3 +291,4 @@ export function buildInp(opts: InpOptions): BuildResult {
     endTimeSec: opts.endTimeSec,
   };
 }
+
