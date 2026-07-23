@@ -374,3 +374,154 @@ export async function runEngine(built: BuildResult): Promise<EngineResult> {
   }
   return runStub(built, built.inp);
 }
+
+// -----------------------------------------------------------------------------
+// Cancelable Web Worker runner with progress reporting.
+// -----------------------------------------------------------------------------
+
+export interface EngineRunHandle {
+  promise: Promise<EngineResult>;
+  cancel: () => void;
+}
+
+export interface EngineRunCallbacks {
+  onProgress?: (pct: number) => void;
+  onLog?: (line: string) => void;
+}
+
+function parseOutBufferToResult(
+  built: BuildResult,
+  rpt: string,
+  outBuf: ArrayBuffer | null,
+  durationMs: number,
+  logLines: string[],
+): EngineResult {
+  const times: number[] = [];
+  const series: NodeSeries[] = [];
+  const links: LinkSeries[] = [];
+  let system: SystemSeries = {
+    totalInflow: [], flooding: [], outflow: [], storage: [],
+    runoff: [], dwflow: [], rainfall: [],
+  };
+  let out: Uint8Array | null = null;
+  if (outBuf) {
+    out = new Uint8Array(outBuf);
+    const parsed = parseSwmmOut(out);
+    if (parsed) {
+      logLines.push(
+        `parsed .out: ${parsed.nPeriods} periods, ${parsed.nodeIds.length} nodes, ${parsed.linkIds.length} links, errorCode=${parsed.errorCode}`,
+      );
+      for (const t of parsed.times) times.push(t);
+      for (let i = 0; i < parsed.nodeIds.length; i++) {
+        const id = parsed.nodeIds[i];
+        const m = /^N?(\d+)$/.exec(id);
+        const node = m ? Number(m[1]) : i + 1;
+        series.push({
+          node,
+          depth: Array.from(parsed.nodeDepth[i]),
+          inflow: Array.from(parsed.nodeTotalInflow[i]),
+        });
+      }
+      const edges = Array.from(built.tree.edges.entries());
+      for (let i = 0; i < parsed.linkIds.length; i++) {
+        const id = parsed.linkIds[i];
+        const m = /^C(\d+)$/.exec(id);
+        const idx = m ? Number(m[1]) - 1 : i;
+        const e = edges[idx];
+        links.push({
+          id,
+          from: e ? e[0] : -1,
+          to: e ? e[1] : -1,
+          flow: Array.from(parsed.linkFlow[i]),
+        });
+      }
+      system = {
+        rainfall: Array.from(parsed.sysVars[1]),
+        runoff: Array.from(parsed.sysVars[4]),
+        dwflow: Array.from(parsed.sysVars[5]),
+        totalInflow: Array.from(parsed.sysVars[9]),
+        flooding: Array.from(parsed.sysVars[10]),
+        outflow: Array.from(parsed.sysVars[11]),
+        storage: Array.from(parsed.sysVars[12]),
+      };
+    } else {
+      logLines.push("parse .out failed (magic / layout mismatch)");
+    }
+  }
+  return {
+    rpt,
+    out,
+    times,
+    series,
+    links,
+    system,
+    engine: "wasm",
+    log: logLines.join("\n"),
+    durationMs,
+  };
+}
+
+export function startEngine(built: BuildResult, cb: EngineRunCallbacks = {}): EngineRunHandle {
+  let cancelled = false;
+  let worker: Worker | null = null;
+
+  const promise = new Promise<EngineResult>((resolve, reject) => {
+    try {
+      worker = new Worker(new URL("./engine.worker.ts", import.meta.url));
+    } catch (e) {
+      // Worker unsupported → fallback on main thread.
+      runEngine(built).then(resolve, reject);
+      return;
+    }
+    const logLines: string[] = [];
+    const t0 = performance.now();
+    worker.onmessage = (ev: MessageEvent) => {
+      if (cancelled) return;
+      const msg = ev.data as
+        | { type: "progress"; pct: number }
+        | { type: "log"; line: string }
+        | { type: "no-wasm" }
+        | { type: "error"; message: string }
+        | { type: "done"; rc: number; rpt: string; out: ArrayBuffer | null; durationMs: number };
+      if (msg.type === "progress") {
+        cb.onProgress?.(msg.pct);
+      } else if (msg.type === "log") {
+        logLines.push(msg.line);
+        cb.onLog?.(msg.line);
+      } else if (msg.type === "no-wasm") {
+        worker?.terminate();
+        worker = null;
+        resolve(runStub(built, built.inp));
+      } else if (msg.type === "error") {
+        logLines.push("worker error: " + msg.message);
+        worker?.terminate();
+        worker = null;
+        resolve(runStub(built, built.inp));
+      } else if (msg.type === "done") {
+        logLines.push(`swmm_run returned ${msg.rc}`);
+        const result = parseOutBufferToResult(built, msg.rpt, msg.out, msg.durationMs || (performance.now() - t0), logLines);
+        worker?.terminate();
+        worker = null;
+        cb.onProgress?.(100);
+        resolve(result);
+      }
+    };
+    worker.onerror = (ev) => {
+      logLines.push("worker onerror: " + ev.message);
+      worker?.terminate();
+      worker = null;
+      resolve(runStub(built, built.inp));
+    };
+    worker.postMessage({ inp: built.inp });
+  });
+
+  return {
+    promise,
+    cancel: () => {
+      cancelled = true;
+      worker?.terminate();
+      worker = null;
+    },
+  };
+}
+
