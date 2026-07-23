@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CollatzTree } from "@/lib/collatz";
 import type { InpOptions } from "@/lib/swmm/inp";
 import type { EngineResult } from "@/lib/swmm/engine";
