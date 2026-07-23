@@ -1,21 +1,15 @@
-# SWMM5 WASM engine slot
+# SWMM5 WASM engine
 
-Drop an Emscripten build of EPA SWMM5 here as:
+`swmm5.js` in this folder is the Emscripten single-file build of EPA SWMM 5.2.x
+distributed as `@fileops/swmm-wasm` on npm. It embeds the `.wasm` binary as a
+data URI, so no separate `swmm5.wasm` is required.
 
-- `swmm5.js`   — glue, built with `-sMODULARIZE=1 -sEXPORT_NAME=createSwmmModule -sEXPORT_ES6=0 -sENVIRONMENT=web`
-- `swmm5.wasm` — the binary
+The upstream module is exported globally as `createModule`; the last line of
+this vendored copy aliases it to `self.createSwmmModule` so the worker in
+`src/lib/swmm/engine.worker.ts` can pick it up unchanged.
 
-The glue must export `createSwmmModule` on `window` (UMD mode).
+Exports (via `cwrap`):
+- `swmm_run(inp, rpt, out)` — one-shot run, returns error code
+- `swmm_open`, `swmm_start`, `swmm_step`, `swmm_end`, `swmm_report`, `swmm_close`
 
-The runner in `src/lib/swmm/engine.ts` will:
-
-1. probe `/wasm/swmm5.js` (HEAD)
-2. inject the script, await `window.createSwmmModule({ locateFile })`
-3. write the generated .inp to MEMFS at `/input.inp`
-4. call either `cwrap("swmm_run","number",["string","string","string"])`
-   or `callMain([...])` with `(/input.inp, /report.rpt, /output.out)`
-5. read `/report.rpt` back as the RPT text, and `/output.out` as a binary blob
-
-If those files are not present, the UI falls back to a stub engine that
-generates a synthetic report and per-node depth time series so every tab
-(Run / RPT / Graphics) stays usable.
+Source: <https://www.npmjs.com/package/@fileops/swmm-wasm>

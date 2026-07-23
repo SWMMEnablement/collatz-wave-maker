@@ -19,6 +19,7 @@ import {
   Legend,
 } from "recharts";
 import { startEngine, type EngineResult, type EngineRunHandle } from "@/lib/swmm/engine";
+import { parseRptSummary } from "@/lib/swmm/rpt";
 import type { BuildResult, InpOptions } from "@/lib/swmm/inp";
 
 interface Props {
@@ -166,6 +167,10 @@ export function EngineRunner({ built, opts, selectedNodes, result: resultProp, o
       .sort((a, b) => b.excess - a.excess || b.maxDepth - a.maxDepth);
   }, [result, built]);
 
+  const runSummary = useMemo(() => (result ? parseRptSummary(result.rpt) : null), [result]);
+
+
+
 
   // Build chart series. Plot ALL nodes/links (no top-N cap), sorted by peak.
   const chartData = (() => {
@@ -298,6 +303,38 @@ export function EngineRunner({ built, opts, selectedNodes, result: resultProp, o
         {err && <span className="text-xs text-destructive">{err}</span>}
       </div>
 
+      {result && runSummary && (
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+          <MetricCard
+            label="Flow continuity"
+            value={runSummary.flowContinuityPct != null ? runSummary.flowContinuityPct.toFixed(3) + " %" : "—"}
+            tone={runSummary.flowContinuityPct != null && Math.abs(runSummary.flowContinuityPct) > 10 ? "bad" : Math.abs(runSummary.flowContinuityPct ?? 0) > 1 ? "warn" : "ok"}
+          />
+          <MetricCard
+            label="Runoff continuity"
+            value={runSummary.runoffContinuityPct != null ? runSummary.runoffContinuityPct.toFixed(3) + " %" : "—"}
+            tone={runSummary.runoffContinuityPct != null && Math.abs(runSummary.runoffContinuityPct) > 10 ? "bad" : "ok"}
+          />
+          <MetricCard
+            label="Flooded nodes"
+            value={String(runSummary.floodedNodes.length)}
+            tone={runSummary.floodedNodes.length > 0 ? "warn" : "ok"}
+          />
+          <MetricCard
+            label="Max surcharge"
+            value={runSummary.maxSurchargeHours != null ? runSummary.maxSurchargeHours.toFixed(2) + " h" : "0 h"}
+            tone={(runSummary.maxSurchargeHours ?? 0) > 0 ? "warn" : "ok"}
+          />
+          <MetricCard
+            label="Analysis errors"
+            value={String(runSummary.analysisErrors.length)}
+            tone={runSummary.analysisErrors.length > 0 ? "bad" : "ok"}
+          />
+        </div>
+      )}
+
+
+
       {!result ? (
         <div className="flex flex-1 items-center justify-center rounded-md border border-dashed border-border p-8">
           <div className="max-w-md space-y-2 text-center text-sm leading-relaxed text-muted-foreground">
@@ -306,10 +343,10 @@ export function EngineRunner({ built, opts, selectedNodes, result: resultProp, o
               execute the engine on the generated .inp.
             </p>
             <p className="text-xs">
-              Uses the real wasm at{" "}
-              <code className="font-mono">/wasm/swmm5.js</code> when present,
-              otherwise falls back to a stub engine that produces a synthetic
-              report and time series.
+              Uses EPA SWMM 5.2.x compiled to WASM (via{" "}
+              <code className="font-mono">@fileops/swmm-wasm</code>) running in a
+              Web Worker. Falls back to a synthetic stub only if the wasm fails
+              to load.
             </p>
           </div>
         </div>
@@ -431,6 +468,16 @@ export function EngineRunner({ built, opts, selectedNodes, result: resultProp, o
           </TabsContent>
         </Tabs>
       )}
+    </div>
+  );
+}
+
+function MetricCard({ label, value, tone }: { label: string; value: string; tone: "ok" | "warn" | "bad" }) {
+  const color = tone === "bad" ? "#ef4444" : tone === "warn" ? "#f59e0b" : "#10b981";
+  return (
+    <div className="rounded-md border border-border bg-card px-3 py-2">
+      <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="mt-1 font-mono text-lg" style={{ color }}>{value}</div>
     </div>
   );
 }

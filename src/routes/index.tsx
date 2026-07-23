@@ -126,11 +126,14 @@ function Page() {
           <p className="mt-2 max-w-2xl text-xs text-muted-foreground">
             <span className="font-mono uppercase tracking-wider text-accent">Model status:</span>{" "}
             the <code className="font-mono">.inp</code>, GeoJSON, and geometric HGL preview
-            are generated deterministically from the topology. The SWMM5 WASM
-            engine is a stub slot at <code className="font-mono text-primary">/public/wasm/</code>
-            {" "}— HGL / node status shown before a run is a <em>geometry preview</em>,
-            not a solver result. Progressive pipe sizing uses <code className="font-mono">√upstream</code>
-            {" "}nodes and is a conceptual demo, not hydraulic design.
+            are generated deterministically from the topology. The{" "}
+            <strong className="text-primary">EPA SWMM 5.2.x engine ships as WASM</strong>{" "}
+            (<code className="font-mono">@fileops/swmm-wasm</code>) under{" "}
+            <code className="font-mono text-primary">/wasm/swmm5.js</code> and runs in a Web
+            Worker — the Engine tab reports continuity error, flooded nodes, and max
+            surcharge from the actual <code className="font-mono">.rpt</code>. Progressive
+            pipe sizing uses <code className="font-mono">√upstream</code> nodes and is a
+            conceptual demo, not hydraulic design.
           </p>
           <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
             The Collatz conjecture (3n+1 problem) is an unsolved puzzle: for any
@@ -192,7 +195,7 @@ function Page() {
               {opts.subcatchments && (
                 <div>subs @ {opts.subcatchmentScope}: <span className="text-primary">{built.subcatchmentCount}</span> · {built.effectiveSubArea.toFixed(3)} {opts.flowUnits === "CFS" ? "ac" : "ha"} ea</div>
               )}
-              <div className="pt-1">engine: <span className="text-accent">stub</span> · wasm: /public/wasm/</div>
+              <div className="pt-1">engine: <span className="text-primary">EPA SWMM 5.2 · WASM</span></div>
             </div>
           </aside>
 
@@ -202,7 +205,7 @@ function Page() {
                 <TabsTrigger value="visual">Visual <Badge tone="ok">GENERATED</Badge></TabsTrigger>
                 <TabsTrigger value="hgl">HGL <Badge tone={engineResult ? "ok" : "warn"}>{engineResult ? "ENGINE" : "GEOMETRY PREVIEW"}</Badge></TabsTrigger>
                 <TabsTrigger value="inp">INP text <Badge tone="ok">GENERATED</Badge></TabsTrigger>
-                <TabsTrigger value="engine">Engine <Badge tone="err">NOT INSTALLED</Badge></TabsTrigger>
+                <TabsTrigger value="engine">Engine <Badge tone={engineResult ? "ok" : "warn"}>{engineResult ? `SWMM5 · ${engineResult.engine.toUpperCase()}` : "WASM READY"}</Badge></TabsTrigger>
                 <TabsTrigger value="docs">Docs</TabsTrigger>
               </TabsList>
               <TabsContent value="visual" className="mt-3">
