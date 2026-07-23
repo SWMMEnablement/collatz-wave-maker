@@ -471,3 +471,13 @@ export function EngineRunner({ built, opts, selectedNodes, result: resultProp, o
     </div>
   );
 }
+
+function MetricCard({ label, value, tone }: { label: string; value: string; tone: "ok" | "warn" | "bad" }) {
+  const color = tone === "bad" ? "#ef4444" : tone === "warn" ? "#f59e0b" : "#10b981";
+  return (
+    <div className="rounded-md border border-border bg-card px-3 py-2">
+      <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="mt-1 font-mono text-lg" style={{ color }}>{value}</div>
+    </div>
+  );
+}
