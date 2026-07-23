@@ -343,10 +343,10 @@ export function EngineRunner({ built, opts, selectedNodes, result: resultProp, o
               execute the engine on the generated .inp.
             </p>
             <p className="text-xs">
-              Uses EPA SWMM 5.2.x compiled to WASM (via <code className="font-mono">@fileops/swmm-wasm</code>) running in a Web Worker. Falls back to a synthetic stub only if the wasm fails to load.
-              <code className="font-mono">/wasm/swmm5.js</code> when present,
-              otherwise falls back to a stub engine that produces a synthetic
-              report and time series.
+              Uses EPA SWMM 5.2.x compiled to WASM (via{" "}
+              <code className="font-mono">@fileops/swmm-wasm</code>) running in a
+              Web Worker. Falls back to a synthetic stub only if the wasm fails
+              to load.
             </p>
           </div>
         </div>
