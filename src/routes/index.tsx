@@ -73,6 +73,18 @@ function Page() {
     URL.revokeObjectURL(url);
   }, [built.inp, opts.maxSeed]);
 
+  const downloadGeoJson = useCallback(() => {
+    const fc = buildGeoJson(built);
+    const blob = new Blob([JSON.stringify(fc, null, 2)], { type: "application/geo+json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `collatz_holy_tree_n${opts.maxSeed}.geojson`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [built, opts.maxSeed]);
+
+
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-7xl px-6 py-10">
