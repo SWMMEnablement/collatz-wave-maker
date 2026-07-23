@@ -514,8 +514,10 @@ export function buildInp(opts: InpOptions): BuildResult {
   };
   push("[INFLOWS]");
   push(";;Node           Constituent      Time Series      Type     Mfactor  Sfactor  Baseline Pattern");
+  const inflowNodes: number[] = [];
   for (const n of tree.nodes) {
-    if (n === 1) continue;
+    if (!inflowSet.has(n)) continue;
+    inflowNodes.push(n);
     push(
       `${pad(n, 17)}${pad("FLOW", 17)}${pad(tsName, 17)}${pad("FLOW", 9)}${pad(
         "1.0",
