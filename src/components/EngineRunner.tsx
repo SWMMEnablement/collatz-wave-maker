@@ -243,10 +243,25 @@ export function EngineRunner({ built, opts, selectedNodes, result: resultProp, o
   return (
     <div className="flex h-full flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
-        <Button onClick={run} disabled={running} size="lg">
-          {running ? "Running…" : "Run SWMM5"}
-        </Button>
-        {result && (
+        {!running ? (
+          <Button onClick={run} size="lg">Run SWMM5</Button>
+        ) : (
+          <Button onClick={cancel} size="lg" variant="destructive">Cancel</Button>
+        )}
+        {running && (
+          <div className="flex min-w-[240px] flex-1 items-center gap-2">
+            <div className="relative h-2 flex-1 overflow-hidden rounded bg-muted">
+              <div
+                className="absolute inset-y-0 left-0 bg-primary transition-[width] duration-150"
+                style={{ width: `${Math.max(2, progress)}%` }}
+              />
+            </div>
+            <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              {progress > 0 ? `${progress.toFixed(0)}%` : "warming up…"} · {(elapsedMs / 1000).toFixed(1)}s
+            </span>
+          </div>
+        )}
+        {result && !running && (
           <>
             <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
               engine: <span className="text-primary">{result.engine}</span> ·{" "}
@@ -265,7 +280,13 @@ export function EngineRunner({ built, opts, selectedNodes, result: resultProp, o
               </SelectContent>
             </Select>
             <Button variant="outline" size="sm" onClick={downloadRpt}>
-              Download .rpt
+              .rpt
+            </Button>
+            <Button variant="outline" size="sm" onClick={downloadOut} disabled={!result.out}>
+              .out
+            </Button>
+            <Button variant="outline" size="sm" onClick={downloadSummary}>
+              summary.json
             </Button>
             {selectedNodes && selectedNodes.size > 0 && (
               <span className="rounded border border-primary/40 bg-primary/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-primary">
