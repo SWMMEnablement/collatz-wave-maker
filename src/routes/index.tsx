@@ -210,6 +210,7 @@ function Page() {
                 <div className="h-[75vh] min-h-[520px]">
                   <EngineRunner
                     built={built}
+                    opts={opts}
                     selectedNodes={selectedNodes}
                     result={engineResult}
                     onResult={setEngineResult}
