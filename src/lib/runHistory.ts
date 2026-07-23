@@ -45,7 +45,6 @@ export function summarizeInputs(opts: InpOptions): string {
   return [
     `N=${opts.maxSeed}`,
     `${opts.flowUnits}`,
-    `${opts.inflowScope}@${opts.peakInflow}${opts.trapezoidPreset ? "/" + opts.trapezoidPreset : ""}`,
     opts.subcatchments ? `sub=${opts.subcatchmentScope}` : "no-sub",
     opts.stormType && opts.stormType !== "none" ? `storm=${opts.stormType}` : "no-storm",
     `dur=${Math.round((opts.endTimeSec ?? 0) / 3600)}h`,
@@ -71,7 +70,6 @@ export function makeHistoryEntry(
       flowUnits: opts.flowUnits,
       inflowScope: opts.inflowScope,
       peakInflow: opts.peakInflow,
-      trapezoidPreset: opts.trapezoidPreset,
       subcatchments: opts.subcatchments,
       subcatchmentScope: opts.subcatchmentScope,
       stormType: opts.stormType,
