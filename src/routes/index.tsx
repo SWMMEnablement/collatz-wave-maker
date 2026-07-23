@@ -228,12 +228,14 @@ function Page() {
           </aside>
 
           <section>
-            <Tabs defaultValue="visual">
+            <Tabs value={tab} onValueChange={setTab}>
               <TabsList>
                 <TabsTrigger value="visual">Visual <Badge tone="ok">GENERATED</Badge></TabsTrigger>
                 <TabsTrigger value="hgl">HGL <Badge tone={engineResult ? "ok" : "warn"}>{engineResult ? "ENGINE" : "GEOMETRY PREVIEW"}</Badge></TabsTrigger>
                 <TabsTrigger value="inp">INP text <Badge tone="ok">GENERATED</Badge></TabsTrigger>
                 <TabsTrigger value="engine">Engine <Badge tone={engineResult ? "ok" : "warn"}>{engineResult ? `SWMM5 · ${engineResult.engine.toUpperCase()}` : "WASM READY"}</Badge></TabsTrigger>
+                <TabsTrigger value="batch">Batch</TabsTrigger>
+                <TabsTrigger value="history">History {history.entries.length > 0 && <Badge tone="ok">{history.entries.length}</Badge>}</TabsTrigger>
                 <TabsTrigger value="docs">Docs</TabsTrigger>
               </TabsList>
               <TabsContent value="visual" className="mt-3">
@@ -278,6 +280,33 @@ function Page() {
                     selectedNodes={selectedNodes}
                     result={engineResult}
                     onResult={setEngineResult}
+                    thresholds={thresholds}
+                    onRunComplete={handleRunComplete}
+                  />
+                </div>
+              </TabsContent>
+              <TabsContent value="batch" className="mt-3">
+                <div className="h-[75vh] min-h-[520px]">
+                  <BatchRunner
+                    baseOpts={opts}
+                    thresholds={thresholds}
+                    onSaveHistory={(entry, result) => history.add(entry, result)}
+                    onReopen={reopenRun}
+                    hasStoredResult={(id) => !!history.getResult(id)}
+                  />
+                </div>
+              </TabsContent>
+              <TabsContent value="history" className="mt-3">
+                <div className="h-[75vh] min-h-[520px]">
+                  <RunHistoryPanel
+                    entries={history.entries}
+                    onReopen={reopenRun}
+                    onRemove={history.remove}
+                    onClear={history.clear}
+                    hasStoredResult={(id) => !!history.getResult(id)}
+                    thresholds={thresholds}
+                    setThresholds={setThresholds}
+                    resetThresholds={resetThresholds}
                   />
                 </div>
               </TabsContent>
