@@ -60,6 +60,7 @@ function ThemeToggle() {
 function Page() {
   const [opts, setOpts] = useState<InpOptions>(defaultOptions);
   const [selectedNodes, setSelectedNodes] = useState<Set<number> | null>(null);
+  const [engineResult, setEngineResult] = useState<import("@/lib/swmm/engine").EngineResult | null>(null);
   const built = useMemo(() => buildInp(opts), [opts]);
   const validation = useMemo(() => validateInp(opts, built), [opts, built]);
 
@@ -168,7 +169,12 @@ function Page() {
               </TabsContent>
               <TabsContent value="hgl" className="mt-3">
                 <div className="h-[75vh] min-h-[520px]">
-                  <HglView tree={built.tree} inverts={built.inverts} opts={opts} />
+                  <HglView
+                    tree={built.tree}
+                    inverts={built.inverts}
+                    opts={opts}
+                    engineResult={engineResult}
+                  />
                 </div>
               </TabsContent>
               <TabsContent value="inp" className="mt-3">
@@ -186,7 +192,12 @@ function Page() {
               </TabsContent>
               <TabsContent value="engine" className="mt-3">
                 <div className="h-[75vh] min-h-[520px]">
-                  <EngineRunner built={built} selectedNodes={selectedNodes} />
+                  <EngineRunner
+                    built={built}
+                    selectedNodes={selectedNodes}
+                    result={engineResult}
+                    onResult={setEngineResult}
+                  />
                 </div>
               </TabsContent>
               <TabsContent value="docs" className="mt-3">
