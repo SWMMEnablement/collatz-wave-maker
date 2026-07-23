@@ -11,7 +11,9 @@ import { EngineRunner } from "@/components/EngineRunner";
 import { DocsView } from "@/components/DocsView";
 import { buildInp, defaultOptions, type InpOptions } from "@/lib/swmm/inp";
 import { validateInp } from "@/lib/swmm/validate";
+import { buildGeoJson } from "@/lib/swmm/geojson";
 import { ThemeProvider, useTheme } from "@/lib/theme";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -71,6 +73,18 @@ function Page() {
     URL.revokeObjectURL(url);
   }, [built.inp, opts.maxSeed]);
 
+  const downloadGeoJson = useCallback(() => {
+    const fc = buildGeoJson(built);
+    const blob = new Blob([JSON.stringify(fc, null, 2)], { type: "application/geo+json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `collatz_holy_tree_n${opts.maxSeed}.geojson`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [built, opts.maxSeed]);
+
+
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-7xl px-6 py-10">
@@ -113,11 +127,21 @@ function Page() {
             >
               Download .inp
             </Button>
+            <Button
+              onClick={downloadGeoJson}
+              variant="outline"
+              className="w-full"
+              size="sm"
+              title="Download nodes + conduits as GeoJSON for QGIS / ArcGIS"
+            >
+              Download .geojson (GIS)
+            </Button>
             {!validation.ok && (
               <p className="text-xs text-destructive">
                 {validation.errors} validation error{validation.errors === 1 ? "" : "s"} — see INP tab.
               </p>
             )}
+
             <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
               engine: stub · wasm slot: /public/wasm/
             </p>

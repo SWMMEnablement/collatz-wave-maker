@@ -13,6 +13,20 @@ export function sequence(seed: number): number[] {
   return out;
 }
 
+/** Path from n down the Collatz sequence to 1, capped at maxSteps entries. */
+export function pathToOne(n: number, maxSteps = 12): number[] {
+  const out: number[] = [n];
+  let cur = n;
+  let steps = 0;
+  while (cur !== 1 && steps < maxSteps) {
+    cur = nextCollatz(cur);
+    out.push(cur);
+    steps++;
+  }
+  return out;
+}
+
+
 export interface CollatzTree {
   nodes: Set<number>;
   edges: Map<number, number>; // n -> next(n)
