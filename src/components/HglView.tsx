@@ -1,22 +1,38 @@
 import { useMemo, useState } from "react";
 import type { CollatzTree } from "@/lib/collatz";
 import type { InpOptions } from "@/lib/swmm/inp";
+import type { EngineResult } from "@/lib/swmm/engine";
 
 interface Props {
   tree: CollatzTree;
   inverts: Map<number, number>;
   opts: InpOptions;
+  engineResult?: EngineResult | null;
 }
 
 /**
  * Hydraulic Grade Line view.
  * Nodes are ordered from highest invert (headwaters, deepest in Collatz tree)
- * down to the outfall (node 1). Plotted: ground (invert + maxDepth),
- * pipe crown (invert + diameter), invert, and a conceptual HGL estimated
- * from the cumulative upstream DWF inflow at each node.
+ * down to the outfall (node 1). When an EngineResult is provided, an
+ * additional time slider is shown and HGL = invert + depth(t) from the engine
+ * so surcharging is visible over the storm.
  */
-export function HglView({ tree, inverts, opts }: Props) {
+export function HglView({ tree, inverts, opts, engineResult }: Props) {
   const [hover, setHover] = useState<number | null>(null);
+  const hasEngine = !!engineResult && engineResult.times.length > 0;
+  const [timeIdx, setTimeIdx] = useState(0);
+  const activeIdx = hasEngine
+    ? Math.min(timeIdx, engineResult!.times.length - 1)
+    : 0;
+
+  const depthByNode = useMemo(() => {
+    const m = new Map<number, number>();
+    if (!hasEngine) return m;
+    for (const s of engineResult!.series) {
+      m.set(s.node, s.depth[activeIdx] ?? 0);
+    }
+    return m;
+  }, [engineResult, hasEngine, activeIdx]);
 
   const data = useMemo(() => {
     // Count upstream subtree size for each node (drives accumulated DWF).
@@ -38,26 +54,37 @@ export function HglView({ tree, inverts, opts }: Props) {
     const rows = Array.from(tree.nodes).map((n) => {
       const inv = inverts.get(n) ?? 0;
       const up = upstreamCount.get(n) ?? 1;
-      // Conceptual HGL: rises with accumulated DWF, capped at ground.
       const qAccum = up * opts.dwfBaseflow;
-      const headProxy = Math.min(
-        opts.maxDepth,
-        Math.log10(1 + qAccum) * (opts.diameter * 1.5),
-      );
+      let hgl: number;
+      let surcharged = false;
+      if (hasEngine) {
+        const d = depthByNode.get(n) ?? 0;
+        hgl = inv + d;
+        surcharged = d > opts.maxDepth - 1e-6 && n !== 1;
+      } else {
+        // Fallback conceptual HGL from cumulative DWF.
+        const headProxy = Math.min(
+          opts.maxDepth,
+          Math.log10(1 + qAccum) * (opts.diameter * 1.5),
+        );
+        hgl = inv + headProxy;
+      }
       return {
         n,
         invert: inv,
         crown: inv + opts.diameter,
         ground: inv + opts.maxDepth,
-        hgl: inv + headProxy,
+        hgl,
         upstream: up,
         q: qAccum,
         isOutfall: n === 1,
+        surcharged,
       };
     });
     rows.sort((a, b) => b.invert - a.invert || a.n - b.n);
     return rows;
-  }, [tree, inverts, opts]);
+  }, [tree, inverts, opts, hasEngine, depthByNode]);
+
 
   const W = 1000;
   const H = 520;
