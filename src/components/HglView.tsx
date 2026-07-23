@@ -1,22 +1,38 @@
 import { useMemo, useState } from "react";
 import type { CollatzTree } from "@/lib/collatz";
 import type { InpOptions } from "@/lib/swmm/inp";
+import type { EngineResult } from "@/lib/swmm/engine";
 
 interface Props {
   tree: CollatzTree;
   inverts: Map<number, number>;
   opts: InpOptions;
+  engineResult?: EngineResult | null;
 }
 
 /**
  * Hydraulic Grade Line view.
  * Nodes are ordered from highest invert (headwaters, deepest in Collatz tree)
- * down to the outfall (node 1). Plotted: ground (invert + maxDepth),
- * pipe crown (invert + diameter), invert, and a conceptual HGL estimated
- * from the cumulative upstream DWF inflow at each node.
+ * down to the outfall (node 1). When an EngineResult is provided, an
+ * additional time slider is shown and HGL = invert + depth(t) from the engine
+ * so surcharging is visible over the storm.
  */
-export function HglView({ tree, inverts, opts }: Props) {
+export function HglView({ tree, inverts, opts, engineResult }: Props) {
   const [hover, setHover] = useState<number | null>(null);
+  const hasEngine = !!engineResult && engineResult.times.length > 0;
+  const [timeIdx, setTimeIdx] = useState(0);
+  const activeIdx = hasEngine
+    ? Math.min(timeIdx, engineResult!.times.length - 1)
+    : 0;
+
+  const depthByNode = useMemo(() => {
+    const m = new Map<number, number>();
+    if (!hasEngine) return m;
+    for (const s of engineResult!.series) {
+      m.set(s.node, s.depth[activeIdx] ?? 0);
+    }
+    return m;
+  }, [engineResult, hasEngine, activeIdx]);
 
   const data = useMemo(() => {
     // Count upstream subtree size for each node (drives accumulated DWF).
@@ -38,26 +54,37 @@ export function HglView({ tree, inverts, opts }: Props) {
     const rows = Array.from(tree.nodes).map((n) => {
       const inv = inverts.get(n) ?? 0;
       const up = upstreamCount.get(n) ?? 1;
-      // Conceptual HGL: rises with accumulated DWF, capped at ground.
       const qAccum = up * opts.dwfBaseflow;
-      const headProxy = Math.min(
-        opts.maxDepth,
-        Math.log10(1 + qAccum) * (opts.diameter * 1.5),
-      );
+      let hgl: number;
+      let surcharged = false;
+      if (hasEngine) {
+        const d = depthByNode.get(n) ?? 0;
+        hgl = inv + d;
+        surcharged = d > opts.maxDepth - 1e-6 && n !== 1;
+      } else {
+        // Fallback conceptual HGL from cumulative DWF.
+        const headProxy = Math.min(
+          opts.maxDepth,
+          Math.log10(1 + qAccum) * (opts.diameter * 1.5),
+        );
+        hgl = inv + headProxy;
+      }
       return {
         n,
         invert: inv,
         crown: inv + opts.diameter,
         ground: inv + opts.maxDepth,
-        hgl: inv + headProxy,
+        hgl,
         upstream: up,
         q: qAccum,
         isOutfall: n === 1,
+        surcharged,
       };
     });
     rows.sort((a, b) => b.invert - a.invert || a.n - b.n);
     return rows;
-  }, [tree, inverts, opts]);
+  }, [tree, inverts, opts, hasEngine, depthByNode]);
+
 
   const W = 1000;
   const H = 520;
@@ -194,6 +221,24 @@ export function HglView({ tree, inverts, opts }: Props) {
           />
         ))}
 
+        {/* Surcharge markers (HGL >= ground) */}
+        {hasEngine && data.filter((d) => d.surcharged).map((d) => {
+          const i = data.indexOf(d);
+          return (
+            <circle
+              key={"sc" + d.n}
+              cx={x(i).toFixed(2)}
+              cy={y(d.hgl).toFixed(2)}
+              r={3.5}
+              fill="oklch(0.72 0.22 25)"
+              stroke="oklch(0.95 0.1 20)"
+              strokeWidth="0.8"
+            >
+              <title>node {d.n} surcharged: depth {(d.hgl - d.invert).toFixed(2)} ≥ {opts.maxDepth}</title>
+            </circle>
+          );
+        })}
+
         {/* Axis labels */}
         <text
           x={padL}
@@ -214,30 +259,59 @@ export function HglView({ tree, inverts, opts }: Props) {
       </svg>
 
       <div className="pointer-events-none absolute left-3 top-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-        hgl · {data.length} nodes · dwf {opts.dwfBaseflow} {opts.flowUnits} / node
+        hgl · {data.length} nodes ·{" "}
+        {hasEngine
+          ? `t = ${(engineResult!.times[activeIdx] ?? 0).toFixed(0)} min · engine=${engineResult!.engine}`
+          : `dwf ${opts.dwfBaseflow} ${opts.flowUnits} / node (conceptual)`}
       </div>
 
       <div className="pointer-events-none absolute right-3 top-3 flex flex-col gap-1 font-mono text-[10px] text-muted-foreground">
         <Legend swatch="oklch(0.35 0.05 60)" label="ground" />
         <Legend swatch="oklch(0.6 0.03 60)" label="pipe crown" dashed />
         <Legend swatch="oklch(0.7 0.05 60)" label="invert" />
-        <Legend swatch="oklch(0.78 0.2 230)" label="hgl (∝ ΣDWF)" />
+        <Legend swatch="oklch(0.78 0.2 230)" label={hasEngine ? "hgl (depth from engine)" : "hgl (∝ ΣDWF)"} />
+        {hasEngine && <Legend swatch="oklch(0.72 0.22 25)" label="surcharged" />}
       </div>
+
+      {hasEngine && (
+        <div className="absolute inset-x-3 bottom-3 flex items-center gap-3 rounded-md border border-border bg-background/85 px-3 py-2 backdrop-blur">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            time
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={engineResult!.times.length - 1}
+            step={1}
+            value={activeIdx}
+            onChange={(e) => setTimeIdx(Number(e.target.value))}
+            className="flex-1 accent-[var(--color-primary)]"
+          />
+          <span className="font-mono text-[10px] text-primary">
+            {(engineResult!.times[activeIdx] ?? 0).toFixed(0)} min
+          </span>
+          <span className="font-mono text-[10px] text-muted-foreground">
+            · {data.filter((d) => d.surcharged).length} surcharged
+          </span>
+        </div>
+      )}
 
       {hover != null && (() => {
         const d = data.find((r) => r.n === hover);
         if (!d) return null;
         return (
-          <div className="pointer-events-none absolute bottom-3 left-3 rounded border border-border bg-background/85 px-2 py-1 font-mono text-xs text-foreground backdrop-blur">
+          <div className="pointer-events-none absolute bottom-16 left-3 rounded border border-border bg-background/85 px-2 py-1 font-mono text-xs text-foreground backdrop-blur">
             n=<span className="text-primary">{d.n}</span> · invert{" "}
             {d.invert.toFixed(2)} · crown {d.crown.toFixed(2)} · hgl{" "}
-            {d.hgl.toFixed(2)} · ΣQ {d.q.toFixed(3)} {opts.flowUnits}
+            {d.hgl.toFixed(2)}
+            {d.surcharged ? " · SURCHARGED" : ""}
           </div>
         );
       })()}
     </div>
   );
 }
+
 
 function Legend({
   swatch,

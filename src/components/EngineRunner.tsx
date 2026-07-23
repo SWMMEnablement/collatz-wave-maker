@@ -24,13 +24,20 @@ import type { BuildResult } from "@/lib/swmm/inp";
 interface Props {
   built: BuildResult;
   selectedNodes?: Set<number> | null;
+  result?: EngineResult | null;
+  onResult?: (r: EngineResult | null) => void;
 }
 
 type Metric = "depth" | "inflow" | "linkflow" | "system";
 
-export function EngineRunner({ built, selectedNodes }: Props) {
+export function EngineRunner({ built, selectedNodes, result: resultProp, onResult }: Props) {
   const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<EngineResult | null>(null);
+  const [internalResult, setInternalResult] = useState<EngineResult | null>(null);
+  const result = resultProp !== undefined ? resultProp : internalResult;
+  const setResult = (r: EngineResult | null) => {
+    setInternalResult(r);
+    onResult?.(r);
+  };
   const [err, setErr] = useState<string | null>(null);
   const [metric, setMetric] = useState<Metric>("depth");
 

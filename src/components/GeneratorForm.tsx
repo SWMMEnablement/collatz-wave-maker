@@ -11,8 +11,10 @@ import {
 import {
   type InpOptions,
   TRAPEZOID_PRESETS,
+  STORM_OPTIONS,
   detectTrapezoidPreset,
   type TrapezoidPresetKey,
+  type StormType,
 } from "@/lib/swmm/inp";
 import { LAYOUT_OPTIONS } from "@/lib/swmm/layout";
 
@@ -216,6 +218,76 @@ export function GeneratorForm({ value, onChange }: Props) {
               onValueChange={([v]) => set("maxDiameterMultiplier", v)}
             />
           </Field>
+        )}
+      </div>
+
+      {/* Rainfall / storm */}
+      <div className="space-y-3 rounded-md border border-border bg-card/60 p-3">
+        <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+          Rainfall / storm
+        </Label>
+        <Select
+          value={value.stormType}
+          onValueChange={(v) => set("stormType", v as StormType)}
+        >
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {STORM_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                <div className="flex flex-col">
+                  <span>{o.label}</span>
+                  <span className="text-xs text-muted-foreground">{o.description}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {value.stormType !== "none" && (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={`Depth (${value.flowUnits === "CFS" ? "in" : "mm"})`}>
+              <Input type="number" step="0.1" min={0} value={value.stormDepth} onChange={num("stormDepth")} />
+            </Field>
+            <Field label="Duration (h)">
+              <Input type="number" step="0.5" min={0} value={value.stormDurationHr} onChange={num("stormDurationHr")} />
+            </Field>
+            <Field label="Interval (min)">
+              <Input type="number" step="1" min={1} value={value.rainIntervalMin} onChange={num("rainIntervalMin")} />
+            </Field>
+          </div>
+        )}
+      </div>
+
+      {/* Subcatchments */}
+      <div className="space-y-2 rounded-md border border-border bg-card/60 p-3">
+        <label className="flex items-center justify-between gap-2">
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">
+            Auto-generate subcatchments
+          </span>
+          <input
+            type="checkbox"
+            checked={value.subcatchments}
+            onChange={(e) => set("subcatchments", e.target.checked)}
+            className="h-4 w-4 accent-[var(--color-primary)]"
+          />
+        </label>
+        <p className="text-[11px] text-muted-foreground">
+          Drops one subcatchment per junction (outlet = the junction) so rainfall turns into runoff.
+        </p>
+        {value.subcatchments && (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={`Area / sub (${value.flowUnits === "CFS" ? "ac" : "ha"})`}>
+              <Input type="number" step="0.1" min={0} value={value.subcatchmentArea} onChange={num("subcatchmentArea")} />
+            </Field>
+            <Field label="% Impervious">
+              <Input type="number" step="1" min={0} max={100} value={value.imperviousPct} onChange={num("imperviousPct")} />
+            </Field>
+            <Field label={`Width (${value.flowUnits === "CFS" ? "ft" : "m"})`}>
+              <Input type="number" step="10" min={0} value={value.subWidth} onChange={num("subWidth")} />
+            </Field>
+            <Field label="Slope %">
+              <Input type="number" step="0.1" min={0} value={value.subSlope} onChange={num("subSlope")} />
+            </Field>
+          </div>
         )}
       </div>
     </div>
