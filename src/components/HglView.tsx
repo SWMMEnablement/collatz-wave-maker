@@ -221,6 +221,24 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
           />
         ))}
 
+        {/* Surcharge markers (HGL >= ground) */}
+        {hasEngine && data.filter((d) => d.surcharged).map((d) => {
+          const i = data.indexOf(d);
+          return (
+            <circle
+              key={"sc" + d.n}
+              cx={x(i).toFixed(2)}
+              cy={y(d.hgl).toFixed(2)}
+              r={3.5}
+              fill="oklch(0.72 0.22 25)"
+              stroke="oklch(0.95 0.1 20)"
+              strokeWidth="0.8"
+            >
+              <title>node {d.n} surcharged: depth {(d.hgl - d.invert).toFixed(2)} ≥ {opts.maxDepth}</title>
+            </circle>
+          );
+        })}
+
         {/* Axis labels */}
         <text
           x={padL}
@@ -241,30 +259,59 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
       </svg>
 
       <div className="pointer-events-none absolute left-3 top-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-        hgl · {data.length} nodes · dwf {opts.dwfBaseflow} {opts.flowUnits} / node
+        hgl · {data.length} nodes ·{" "}
+        {hasEngine
+          ? `t = ${(engineResult!.times[activeIdx] ?? 0).toFixed(0)} min · engine=${engineResult!.engine}`
+          : `dwf ${opts.dwfBaseflow} ${opts.flowUnits} / node (conceptual)`}
       </div>
 
       <div className="pointer-events-none absolute right-3 top-3 flex flex-col gap-1 font-mono text-[10px] text-muted-foreground">
         <Legend swatch="oklch(0.35 0.05 60)" label="ground" />
         <Legend swatch="oklch(0.6 0.03 60)" label="pipe crown" dashed />
         <Legend swatch="oklch(0.7 0.05 60)" label="invert" />
-        <Legend swatch="oklch(0.78 0.2 230)" label="hgl (∝ ΣDWF)" />
+        <Legend swatch="oklch(0.78 0.2 230)" label={hasEngine ? "hgl (depth from engine)" : "hgl (∝ ΣDWF)"} />
+        {hasEngine && <Legend swatch="oklch(0.72 0.22 25)" label="surcharged" />}
       </div>
+
+      {hasEngine && (
+        <div className="absolute inset-x-3 bottom-3 flex items-center gap-3 rounded-md border border-border bg-background/85 px-3 py-2 backdrop-blur">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            time
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={engineResult!.times.length - 1}
+            step={1}
+            value={activeIdx}
+            onChange={(e) => setTimeIdx(Number(e.target.value))}
+            className="flex-1 accent-[var(--color-primary)]"
+          />
+          <span className="font-mono text-[10px] text-primary">
+            {(engineResult!.times[activeIdx] ?? 0).toFixed(0)} min
+          </span>
+          <span className="font-mono text-[10px] text-muted-foreground">
+            · {data.filter((d) => d.surcharged).length} surcharged
+          </span>
+        </div>
+      )}
 
       {hover != null && (() => {
         const d = data.find((r) => r.n === hover);
         if (!d) return null;
         return (
-          <div className="pointer-events-none absolute bottom-3 left-3 rounded border border-border bg-background/85 px-2 py-1 font-mono text-xs text-foreground backdrop-blur">
+          <div className="pointer-events-none absolute bottom-16 left-3 rounded border border-border bg-background/85 px-2 py-1 font-mono text-xs text-foreground backdrop-blur">
             n=<span className="text-primary">{d.n}</span> · invert{" "}
             {d.invert.toFixed(2)} · crown {d.crown.toFixed(2)} · hgl{" "}
-            {d.hgl.toFixed(2)} · ΣQ {d.q.toFixed(3)} {opts.flowUnits}
+            {d.hgl.toFixed(2)}
+            {d.surcharged ? " · SURCHARGED" : ""}
           </div>
         );
       })()}
     </div>
   );
 }
+
 
 function Legend({
   swatch,
