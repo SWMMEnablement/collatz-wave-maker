@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CollatzTree } from "@/lib/collatz";
+import { pathToOne } from "@/lib/collatz";
+
 
 interface Props {
   tree: CollatzTree;
@@ -340,11 +342,22 @@ export function HolyTreeCanvas({ tree, coords, selectedNodes, onSelectionChange 
       )}
 
       {hover != null && (
-        <div className="pointer-events-none absolute right-3 top-3 rounded border border-border bg-background/80 px-2 py-1 font-mono text-xs text-foreground backdrop-blur">
-          n = <span className="text-primary">{hover}</span> · depth{" "}
-          {tree.depth.get(hover)}
+        <div className="pointer-events-none absolute right-3 top-3 max-w-xs rounded border border-border bg-background/85 px-2 py-1.5 font-mono text-xs text-foreground backdrop-blur">
+          <div>
+            n = <span className="text-primary">{hover}</span> · depth{" "}
+            {tree.depth.get(hover)}
+            {hover === 1 && <span className="ml-2 text-accent">(outfall)</span>}
+          </div>
+          <div className="mt-1 text-[10px] text-muted-foreground">
+            path:{" "}
+            <span className="text-foreground/90">
+              {pathToOne(hover, 10).join(" → ")}
+              {tree.depth.get(hover) != null && (tree.depth.get(hover) as number) > 10 ? " → …" : ""}
+            </span>
+          </div>
         </div>
       )}
+
     </div>
   );
 }
