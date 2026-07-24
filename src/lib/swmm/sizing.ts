@@ -101,13 +101,25 @@ function runWithSignal(
   });
 }
 
+export interface AutoSizeStreamCallbacks {
+  onProgress?: (idx: number, total: number, attempt: SizingAttempt, enginePct?: number) => void;
+  /** Fires once per completed attempt (pass or fail) — enables live UI streaming. */
+  onAttempt?: (attempt: SizingAttempt, idx: number, total: number) => void;
+}
+
 export async function autoSizeUniform(
   baseOpts: InpOptions,
   constraints: SizingConstraints,
   diameters: number[] = standardDiametersFor(baseOpts.flowUnits),
-  onProgress?: (idx: number, total: number, attempt: SizingAttempt, enginePct?: number) => void,
+  onProgressOrCb?:
+    | AutoSizeStreamCallbacks
+    | ((idx: number, total: number, attempt: SizingAttempt, enginePct?: number) => void),
   signal?: AbortSignal,
+  /** Previously-completed attempts to skip (resume from manifest). */
+  priorAttempts: SizingAttempt[] = [],
 ): Promise<AutoSizeOutcome> {
+  const cb: AutoSizeStreamCallbacks =
+    typeof onProgressOrCb === "function" ? { onProgress: onProgressOrCb } : (onProgressOrCb ?? {});
   const sorted = [...diameters].sort((a, b) => a - b);
   const attempts: SizingAttempt[] = [];
   let chosen: SizingAttempt | null = null;
@@ -115,24 +127,75 @@ export async function autoSizeUniform(
   let finalResult: EngineResult | null = null;
   let finalMetrics: RptSummary | null = null;
 
+  // Replay prior attempts (from a saved manifest) so the caller sees them
+  // in the stream, but do NOT re-run them.
+  const priorByDiam = new Map(priorAttempts.map((a) => [a.diameter, a]));
+  for (const prior of priorAttempts) {
+    attempts.push(prior);
+    cb.onAttempt?.(prior, attempts.length, sorted.length);
+    if (prior.passed) {
+      chosen = prior;
+    }
+  }
+  if (chosen) {
+    // Already solved from the manifest — nothing left to do; but we still need
+    // a final built/result/metrics for the outcome. Re-run only the chosen Ø.
+    const opts: InpOptions = { ...baseOpts, diameter: chosen.diameter, progressiveSizing: false };
+    finalBuilt = buildInp(opts);
+    finalResult = await runWithSignal(finalBuilt, signal);
+    finalMetrics = parseRptSummary(finalResult.rpt);
+    return { chosen, attempts, finalBuilt, finalResult, finalMetrics };
+  }
+
   for (let i = 0; i < sorted.length; i++) {
     if (signal?.aborted) throw new CancelledError();
     const d = sorted[i];
+    if (priorByDiam.has(d)) continue; // already tried in a previous run
     const opts: InpOptions = { ...baseOpts, diameter: d, progressiveSizing: false };
     const built = buildInp(opts);
     const t0 = performance.now();
-    const result = await runWithSignal(built, signal, (pct) => {
-      onProgress?.(i + 1, sorted.length, {
-        diameter: d, flooded: 0, maxDepthRatio: 0, maxVelocity: 0,
-        continuityPct: null, runtimeMs: 0, passed: false, reason: "running",
-      }, pct);
-    });
+    let result: EngineResult;
+    try {
+      result = await runWithSignal(built, signal, (pct) => {
+        cb.onProgress?.(i + 1, sorted.length, {
+          diameter: d, flooded: 0, maxDepthRatio: 0, maxVelocity: 0,
+          continuityPct: null, runtimeMs: 0, passed: false, reason: "running",
+          engineExitCode: null, analysisErrors: [], analysisWarnings: [], engineLogTail: "",
+        }, pct);
+      });
+    } catch (e) {
+      if (e instanceof CancelledError) throw e;
+      const msg = (e as Error).message ?? String(e);
+      const failAttempt: SizingAttempt = {
+        diameter: d,
+        flooded: 0,
+        maxDepthRatio: 0,
+        maxVelocity: 0,
+        continuityPct: null,
+        runtimeMs: performance.now() - t0,
+        passed: false,
+        reason: `engine failed: ${msg}`,
+        engineExitCode: null,
+        engineFailReason: msg,
+        analysisErrors: [],
+        analysisWarnings: [],
+        engineLogTail: msg.split("\n").slice(-20).join("\n"),
+      };
+      attempts.push(failAttempt);
+      cb.onAttempt?.(failAttempt, i + 1, sorted.length);
+      cb.onProgress?.(i + 1, sorted.length, failAttempt, 100);
+      continue; // try next diameter
+    }
     const runtimeMs = performance.now() - t0;
     const metrics = parseRptSummary(result.rpt);
     const maxDR = computeMaxDepthRatio(result, () => d);
     const maxV = computeMaxVelocity(result);
     const flooded = metrics.floodedNodes.length;
     const reasons: string[] = [];
+    if (result.exitCode != null && result.exitCode !== 0)
+      reasons.push(`exit=${result.exitCode}`);
+    if (metrics.analysisErrors.length)
+      reasons.push(`${metrics.analysisErrors.length} solver error(s)`);
     if (flooded > constraints.maxFloodedNodes)
       reasons.push(`flooded ${flooded} > ${constraints.maxFloodedNodes}`);
     if (maxDR > constraints.maxDepthRatio)
@@ -140,6 +203,7 @@ export async function autoSizeUniform(
     if (maxV > constraints.maxVelocity)
       reasons.push(`v ${maxV.toFixed(2)} > ${constraints.maxVelocity}`);
     const passed = reasons.length === 0;
+    const logTail = (result.log ?? "").split("\n").slice(-20).join("\n");
     const attempt: SizingAttempt = {
       diameter: d,
       flooded,
@@ -149,12 +213,17 @@ export async function autoSizeUniform(
       runtimeMs,
       passed,
       reason: reasons.join("; "),
+      engineExitCode: result.exitCode,
+      analysisErrors: metrics.analysisErrors,
+      analysisWarnings: metrics.analysisWarnings,
+      engineLogTail: logTail,
     };
     attempts.push(attempt);
     finalBuilt = built;
     finalResult = result;
     finalMetrics = metrics;
-    onProgress?.(i + 1, sorted.length, attempt, 100);
+    cb.onAttempt?.(attempt, i + 1, sorted.length);
+    cb.onProgress?.(i + 1, sorted.length, attempt, 100);
     if (passed) {
       chosen = attempt;
       break;
