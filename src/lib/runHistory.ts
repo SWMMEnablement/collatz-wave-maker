@@ -31,6 +31,9 @@ export interface RunHistoryEntry {
     floodedNodeIds?: string[];
     surchargedNodeIds?: string[];
   };
+}
+
+
 
 
 const KEY = "collatz-swmm.history.v1";
