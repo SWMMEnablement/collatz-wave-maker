@@ -28,8 +28,13 @@ export interface RunHistoryEntry {
     surchargedNodes: number;
     maxSurchargeHours: number | null;
     analysisErrors: number;
+    floodedNodeIds?: string[];
+    surchargedNodeIds?: string[];
   };
 }
+
+
+
 
 const KEY = "collatz-swmm.history.v1";
 const MAX_ENTRIES = 30;
@@ -90,6 +95,9 @@ export function makeHistoryEntry(
       surchargedNodes: metrics.surchargedNodes.length,
       maxSurchargeHours: metrics.maxSurchargeHours,
       analysisErrors: metrics.analysisErrors.length,
+      floodedNodeIds: metrics.floodedNodes.map((n) => n.id),
+      surchargedNodeIds: metrics.surchargedNodes.map((n) => n.id),
+
     },
   };
   return entry;
