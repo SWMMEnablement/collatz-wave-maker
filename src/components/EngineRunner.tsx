@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
@@ -62,6 +62,21 @@ export function EngineRunner({
   };
   const [err, setErr] = useState<string | null>(null);
   const [metric, setMetric] = useState<Metric>("depth");
+  const [wasmStatus, setWasmStatus] = useState<"checking" | "ready" | "error">("checking");
+
+  useEffect(() => {
+    let active = true;
+    fetch("/wasm/swmm5.js", { method: "HEAD" })
+      .then((res) => {
+        if (active) setWasmStatus(res.ok ? "ready" : "error");
+      })
+      .catch(() => {
+        if (active) setWasmStatus("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const run = () => {
     setRunning(true);
@@ -263,13 +278,20 @@ export function EngineRunner({
   })();
 
   const palette = [
-    "hsl(var(--primary))",
-    "#e85d3a",
-    "#2dd4a8",
-    "#c9a84c",
-    "#9b72cf",
-    "#5cbdb9",
+    "var(--primary)",
+    "var(--accent)",
+    "var(--chart-2)",
+    "var(--chart-3)",
+    "var(--chart-4)",
+    "var(--chart-5)",
   ];
+
+  const wasmStatusClass =
+    wasmStatus === "ready"
+      ? "border-primary/40 bg-primary/10 text-primary"
+      : wasmStatus === "error"
+        ? "border-destructive/40 bg-destructive/10 text-destructive"
+        : "border-border bg-muted text-muted-foreground";
 
   return (
     <div className="flex h-full flex-col gap-3">
@@ -292,6 +314,9 @@ export function EngineRunner({
             </span>
           </div>
         )}
+        <span className={`rounded border px-2 py-1 font-mono text-[10px] uppercase tracking-wider ${wasmStatusClass}`}>
+          WASM asset: {wasmStatus === "ready" ? "ready" : wasmStatus === "error" ? "missing" : "checking"}
+        </span>
         {result && !running && (
           <>
             <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
@@ -371,8 +396,9 @@ export function EngineRunner({
             <p className="text-xs">
               Uses EPA SWMM 5.2.x compiled to WASM (via{" "}
               <code className="font-mono">@fileops/swmm-wasm</code>) running in a
-              Web Worker. Falls back to a synthetic stub only if the wasm fails
-              to load.
+              Web Worker. The bundled asset is <code className="font-mono">/wasm/swmm5.js</code>
+              {" "}(~755 KiB, embedded WASM); if it cannot load, the run fails visibly
+              instead of showing synthetic results.
             </p>
           </div>
         </div>
