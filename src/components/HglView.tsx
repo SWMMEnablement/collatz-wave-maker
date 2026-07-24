@@ -371,9 +371,13 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
           <span className="font-mono text-[10px] text-primary">
             {(engineResult!.times[activeIdx] ?? 0).toFixed(0)} min
           </span>
-          <span className="font-mono text-[10px] text-muted-foreground">
+          <span className="font-mono text-[10px] text-accent">
             · {data.filter((d) => d.surcharged).length} surcharged
           </span>
+          <span className="font-mono text-[10px] text-destructive">
+            · {data.filter((d) => d.flooded).length} flooded
+          </span>
+
         </div>
       )}
 
