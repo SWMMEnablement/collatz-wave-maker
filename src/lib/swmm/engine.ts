@@ -383,7 +383,7 @@ export function startEngine(built: BuildResult, cb: EngineRunCallbacks = {}): En
         reject(new Error("EPA SWMM5 WASM worker failed: " + msg.message));
       } else if (msg.type === "done") {
         logLines.push(`swmm_run returned ${msg.rc}`);
-        const result = parseOutBufferToResult(built, msg.rpt, msg.out, msg.durationMs || (performance.now() - t0), logLines);
+        const result = parseOutBufferToResult(built, msg.rpt, msg.out, msg.durationMs || (performance.now() - t0), logLines, msg.rc);
         worker?.terminate();
         worker = null;
         cb.onProgress?.(100);
