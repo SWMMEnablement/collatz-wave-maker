@@ -75,10 +75,14 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
       const qAccum = up * opts.dwfBaseflow;
       let hgl: number;
       let surcharged = false;
+      let flooded = false;
       if (hasEngine) {
         const d = depthByNode.get(n) ?? 0;
         hgl = inv + d;
-        surcharged = d > opts.maxDepth - 1e-6 && n !== 1;
+        if (n !== 1) {
+          if (d >= opts.maxDepth * 1.02) flooded = true;
+          else if (d >= opts.maxDepth * 0.98) surcharged = true;
+        }
       } else {
         // Fallback conceptual HGL from cumulative DWF.
         const headProxy = Math.min(
@@ -97,8 +101,10 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
         q: qAccum,
         isOutfall: n === 1,
         surcharged,
+        flooded,
       };
     });
+
     rows.sort((a, b) => b.invert - a.invert || a.n - b.n);
     return rows;
   }, [tree, inverts, opts, hasEngine, depthByNode]);
