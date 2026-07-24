@@ -664,22 +664,23 @@ function AttemptRow({ a, chosen }: { a: SizingAttempt; chosen: boolean }) {
 function CompareRow({
   label, u, p, digits = 0, suffix = "", highlight,
 }: {
-  label: string; u: number; p: number; digits?: number; suffix?: string;
+  label: string; u: number | undefined; p: number | undefined; digits?: number; suffix?: string;
   highlight?: "lower" | "higher";
 }) {
-  const delta = p - u;
-  const better =
-    highlight === "lower" ? (delta < 0 ? "p" : delta > 0 ? "u" : null)
+  const both = u != null && p != null;
+  const delta = both ? (p as number) - (u as number) : 0;
+  const better = !both ? null
+    : highlight === "lower" ? (delta < 0 ? "p" : delta > 0 ? "u" : null)
     : highlight === "higher" ? (delta > 0 ? "p" : delta < 0 ? "u" : null)
     : null;
-  const fmt = (n: number) => n.toFixed(digits) + suffix;
+  const fmt = (n: number | undefined) => (n == null ? "…" : n.toFixed(digits) + suffix);
   return (
     <tr className="border-t border-border">
       <td className="px-2 py-1 text-muted-foreground">{label}</td>
       <td className={`px-2 py-1 ${better === "u" ? "text-primary" : ""}`}>{fmt(u)}</td>
       <td className={`px-2 py-1 ${better === "p" ? "text-primary" : ""}`}>{fmt(p)}</td>
-      <td className={`px-2 py-1 ${delta === 0 ? "text-muted-foreground" : delta > 0 ? "text-accent" : "text-primary"}`}>
-        {delta > 0 ? "+" : ""}{fmt(delta)}
+      <td className={`px-2 py-1 ${!both ? "text-muted-foreground" : delta === 0 ? "text-muted-foreground" : delta > 0 ? "text-accent" : "text-primary"}`}>
+        {both ? `${delta > 0 ? "+" : ""}${fmt(delta)}` : "—"}
       </td>
     </tr>
   );
