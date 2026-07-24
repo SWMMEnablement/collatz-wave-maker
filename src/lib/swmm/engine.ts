@@ -339,7 +339,7 @@ export function startEngine(built: BuildResult, cb: EngineRunCallbacks = {}): En
     try {
       worker = new Worker(new URL("./engine.worker.ts", import.meta.url));
     } catch (e) {
-      // Worker unsupported → fallback on main thread.
+      // Worker unsupported → run on the main thread.
       runEngine(built).then(resolve, reject);
       return;
     }

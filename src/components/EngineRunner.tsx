@@ -398,7 +398,7 @@ export function EngineRunner({
               <code className="font-mono">@fileops/swmm-wasm</code>) running in a
               Web Worker. The bundled asset is <code className="font-mono">/wasm/swmm5.js</code>
               {" "}(~755 KiB, embedded WASM); if it cannot load, the run fails visibly
-              instead of showing synthetic results.
+              instead of showing placeholder results.
             </p>
           </div>
         </div>

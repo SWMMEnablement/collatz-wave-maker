@@ -204,7 +204,7 @@ next(n) = 3 * n + 1      if n is odd`}
             <li>src/lib/collatz.ts — sequence + tree construction</li>
             <li>src/lib/swmm/layout.ts — XY positions for the tree</li>
             <li>src/lib/swmm/inp.ts — assembles all SWMM5 sections</li>
-            <li>src/lib/swmm/engine.ts — runs the wasm / stub engine</li>
+            <li>src/lib/swmm/engine.ts — runs the EPA SWMM5 WASM engine</li>
           </ul>
         </section>
       </article>
