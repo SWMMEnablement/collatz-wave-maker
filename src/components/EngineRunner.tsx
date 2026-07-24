@@ -28,6 +28,13 @@ import {
   toneForSurcharge,
   type Thresholds,
 } from "@/lib/thresholds";
+import {
+  getEngineProvenance,
+  formatBytes,
+  shortHash,
+  type EngineProvenance,
+} from "@/lib/swmm/provenance";
+import { buildManifest } from "@/lib/swmm/manifest";
 
 interface Props {
   built: BuildResult;
@@ -63,16 +70,15 @@ export function EngineRunner({
   const [err, setErr] = useState<string | null>(null);
   const [metric, setMetric] = useState<Metric>("depth");
   const [wasmStatus, setWasmStatus] = useState<"checking" | "ready" | "error">("checking");
+  const [provenance, setProvenance] = useState<EngineProvenance | null>(null);
 
   useEffect(() => {
     let active = true;
-    fetch("/wasm/swmm5.js", { method: "HEAD" })
-      .then((res) => {
-        if (active) setWasmStatus(res.ok ? "ready" : "error");
-      })
-      .catch(() => {
-        if (active) setWasmStatus("error");
-      });
+    getEngineProvenance().then((p) => {
+      if (!active) return;
+      setProvenance(p);
+      setWasmStatus(p.status === "ready" ? "ready" : p.status === "checking" ? "checking" : "error");
+    });
     return () => {
       active = false;
     };
@@ -177,6 +183,21 @@ export function EngineRunner({
     triggerDownload(
       new Blob([JSON.stringify(summary, null, 2)], { type: "application/json" }),
       "swmm5_summary.json",
+    );
+  };
+
+  const downloadManifest = async () => {
+    const prov = provenance ?? (await getEngineProvenance());
+    const metrics = result ? parseRptSummary(result.rpt) : null;
+    const manifest = await buildManifest(
+      opts,
+      built,
+      prov,
+      result && metrics ? { result, metrics } : undefined,
+    );
+    triggerDownload(
+      new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" }),
+      `collatz_run_manifest_n${opts.maxSeed}.json`,
     );
   };
 
@@ -344,6 +365,9 @@ export function EngineRunner({
             <Button variant="outline" size="sm" onClick={downloadSummary}>
               summary.json
             </Button>
+            <Button variant="outline" size="sm" onClick={downloadManifest} title="Deterministic run manifest with engine + INP hashes">
+              manifest.json
+            </Button>
             {selectedNodes && selectedNodes.size > 0 && (
               <span className="rounded border border-primary/40 bg-primary/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-primary">
                 filtered: {selectedNodes.size} node{selectedNodes.size === 1 ? "" : "s"} selected on diagram
@@ -383,6 +407,21 @@ export function EngineRunner({
           />
         </div>
       )}
+
+      {provenance && (
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-md border border-border bg-card/60 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground md:grid-cols-4">
+          <ProvCell label="Engine" value={`${provenance.engineName} ${provenance.engineVersion}`} />
+          <ProvCell label="Package" value={`${provenance.packageName} · ${provenance.packageVersion}`} />
+          <ProvCell label="WASM asset" value={`${formatBytes(provenance.assetBytes)} · ${provenance.assetPath}`} />
+          <ProvCell label="WASM SHA-256" value={shortHash(provenance.assetSha256, 16)} title={provenance.assetSha256 ?? undefined} />
+          <ProvCell label="Wrapper" value={provenance.wrapperCommit} />
+          <ProvCell label="Integer mode" value="Number (f64)" />
+          <ProvCell label="Iteration cap" value="100 000 / seed" />
+          <ProvCell label="Worker" value="cancelable · progress %" />
+        </div>
+      )}
+
+
 
 
 
@@ -531,6 +570,15 @@ function MetricCard({ label, value, tone }: { label: string; value: string; tone
     <div className="rounded-md border border-border bg-card px-3 py-2">
       <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className="mt-1 font-mono text-lg" style={{ color }}>{value}</div>
+    </div>
+  );
+}
+
+function ProvCell({ label, value, title }: { label: string; value: string; title?: string }) {
+  return (
+    <div className="flex min-w-0 flex-col" title={title}>
+      <span className="text-[9px] text-muted-foreground/70">{label}</span>
+      <span className="truncate text-foreground/90 normal-case">{value}</span>
     </div>
   );
 }
