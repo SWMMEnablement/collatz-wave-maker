@@ -239,6 +239,7 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
       engine: "wasm",
       log: log.join("\n"),
       durationMs: performance.now() - t0,
+      exitCode: null,
     };
   } finally {
     if (origPrint) (mod as unknown as { print: (s: string) => void }).print = origPrint;
