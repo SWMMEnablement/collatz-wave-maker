@@ -884,7 +884,7 @@ function buildCsv(p: ExportPayload): string {
   lines.push("");
   lines.push("section,field,run_a,run_b");
   const runFields: Array<keyof RunSummary> = [
-    "id", "label", "timestamp", "inputVersion", "engine", "nodeCount", "conduitCount", "durationSec",
+    "id", "label", "timestamp", "inputVersion", "engine", "nodeCount", "conduitCount", "durationSec", "steps", "optsJson",
   ];
   for (const f of runFields) {
     lines.push(`run_meta,${f},${csvEscape(p.runA[f])},${csvEscape(p.runB[f])}`);
