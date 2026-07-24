@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   toneForContinuity,
@@ -15,6 +15,8 @@ interface Props {
   onReopen: (id: string) => void;
   hasStoredResult: (id: string) => boolean;
 }
+
+const IMPORTED_KEY = "collatz-swmm.compare.imported.v1";
 
 const SELECTION_KEY = "collatz-swmm.compare.selection.v1";
 
@@ -34,30 +36,51 @@ export function ComparePanel({ entries, thresholds, onReopen, hasStoredResult }:
   const [aId, setAId] = useState<string>("");
   const [bId, setBId] = useState<string>("");
   const [hydrated, setHydrated] = useState(false);
+  const [importedEntries, setImportedEntries] = useState<RunHistoryEntry[]>([]);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Hydrate persisted selection once, then reconcile against current entries.
+  // Hydrate persisted selection + imported entries once.
   useEffect(() => {
     const s = loadSelection();
     setAId(s.a);
     setBId(s.b);
+    try {
+      const raw = window.localStorage.getItem(IMPORTED_KEY);
+      if (raw) setImportedEntries(JSON.parse(raw));
+    } catch {
+      /* ignore */
+    }
     setHydrated(true);
   }, []);
 
+  const mergedEntries = useMemo(() => {
+    const seen = new Set<string>();
+    const out: RunHistoryEntry[] = [];
+    for (const e of [...importedEntries, ...entries]) {
+      if (seen.has(e.id)) continue;
+      seen.add(e.id);
+      out.push(e);
+    }
+    return out;
+  }, [importedEntries, entries]);
+
   useEffect(() => {
     if (!hydrated) return;
-    const has = (id: string) => !!id && entries.some((e) => e.id === id);
+    const has = (id: string) => !!id && mergedEntries.some((e) => e.id === id);
     setAId((prev) => {
       if (has(prev)) return prev;
-      return entries[0]?.id ?? "";
+      return mergedEntries[0]?.id ?? "";
     });
     setBId((prev) => {
-      if (has(prev) && prev !== (entries[0]?.id ?? "")) return prev;
-      const alt = entries.find((e) => e.id !== (aId || entries[0]?.id));
+      if (has(prev) && prev !== (mergedEntries[0]?.id ?? "")) return prev;
+      const alt = mergedEntries.find((e) => e.id !== (aId || mergedEntries[0]?.id));
       return alt?.id ?? "";
     });
     // aId intentionally omitted — we only want to auto-heal when entries change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, hydrated]);
+  }, [mergedEntries, hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -68,8 +91,45 @@ export function ComparePanel({ entries, thresholds, onReopen, hasStoredResult }:
     }
   }, [aId, bId, hydrated]);
 
-  const a = entries.find((e) => e.id === aId);
-  const b = entries.find((e) => e.id === bId);
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      window.localStorage.setItem(IMPORTED_KEY, JSON.stringify(importedEntries));
+    } catch {
+      /* ignore */
+    }
+  }, [importedEntries, hydrated]);
+
+  const a = mergedEntries.find((e) => e.id === aId);
+  const b = mergedEntries.find((e) => e.id === bId);
+
+  const handleImportFile = async (file: File) => {
+    setImportError(null);
+    setImportNotice(null);
+    try {
+      const text = await file.text();
+      const isJson = /\.json$/i.test(file.name) || text.trim().startsWith("{");
+      const payload = isJson ? parseImportJson(text) : parseImportCsv(text);
+      const [entryA, entryB] = payloadToEntries(payload);
+      setImportedEntries((prev) => {
+        const filtered = prev.filter((e) => e.id !== entryA.id && e.id !== entryB.id);
+        return [entryA, entryB, ...filtered].slice(0, 20);
+      });
+      setAId(entryA.id);
+      setBId(entryB.id);
+      setImportNotice(`Imported ${entryA.label} vs ${entryB.label}`);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Failed to import file");
+    }
+  };
+
+  const clearImported = () => {
+    setImportedEntries([]);
+    setImportNotice(null);
+    setImportError(null);
+  };
+
+
 
 
   const nodeDiff = useMemo(() => {
@@ -113,12 +173,32 @@ export function ComparePanel({ entries, thresholds, onReopen, hasStoredResult }:
   };
 
 
-  if (entries.length < 2) {
+  if (mergedEntries.length < 2) {
     return (
-      <div className="flex h-full items-center justify-center rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-        Need at least two runs in history to compare. Run more simulations from the
-        <span className="mx-1 font-mono text-primary">Engine</span> or
-        <span className="mx-1 font-mono text-primary">Batch</span> tab.
+      <div className="flex h-full flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+        <p>
+          Need at least two runs to compare. Run more simulations from the
+          <span className="mx-1 font-mono text-primary">Engine</span> or
+          <span className="mx-1 font-mono text-primary">Batch</span> tab, or import a previously
+          exported comparison.
+        </p>
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,.csv,application/json,text/csv"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleImportFile(f);
+              e.target.value = "";
+            }}
+          />
+          <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
+            Import comparison…
+          </Button>
+        </div>
+        {importError && <p className="text-xs text-destructive">{importError}</p>}
       </div>
     );
   }
@@ -131,11 +211,40 @@ export function ComparePanel({ entries, thresholds, onReopen, hasStoredResult }:
             <h3 className="text-sm font-semibold">Compare two runs</h3>
             <p className="mt-1 text-xs text-muted-foreground">
               Highlights the delta in key metrics and the set difference of flooded /
-              surcharged nodes between two runs from history. Selection is remembered
-              across reloads.
+              surcharged nodes between two runs. Selection is remembered across reloads;
+              imported runs are tagged and stored locally.
             </p>
           </div>
-          <div className="flex flex-shrink-0 gap-2">
+          <div className="flex flex-shrink-0 flex-wrap justify-end gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,.csv,application/json,text/csv"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleImportFile(f);
+                e.target.value = "";
+              }}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              title="Load a previously exported comparison (JSON or CSV)"
+            >
+              Import…
+            </Button>
+            {importedEntries.length > 0 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={clearImported}
+                title="Remove imported runs from the picker"
+              >
+                Clear imports
+              </Button>
+            )}
             <Button
               size="sm"
               variant="outline"
@@ -156,11 +265,21 @@ export function ComparePanel({ entries, thresholds, onReopen, hasStoredResult }:
             </Button>
           </div>
         </div>
+        {(importError || importNotice) && (
+          <p
+            className={`mt-2 text-xs ${
+              importError ? "text-destructive" : "text-muted-foreground"
+            }`}
+          >
+            {importError ?? importNotice}
+          </p>
+        )}
         <div className="mt-3 grid gap-3 md:grid-cols-2">
-          <RunPicker label="Run A" value={aId} onChange={setAId} entries={entries} exclude={bId} />
-          <RunPicker label="Run B" value={bId} onChange={setBId} entries={entries} exclude={aId} />
+          <RunPicker label="Run A" value={aId} onChange={setAId} entries={mergedEntries} exclude={bId} />
+          <RunPicker label="Run B" value={bId} onChange={setBId} entries={mergedEntries} exclude={aId} />
         </div>
       </div>
+
 
       {a && b ? (
         <>
@@ -706,6 +825,8 @@ interface RunSummary {
   nodeCount: number;
   conduitCount: number;
   durationSec: number;
+  steps: number;
+  optsJson: string;
 }
 
 function summarizeRun(e: RunHistoryEntry): RunSummary {
@@ -718,8 +839,11 @@ function summarizeRun(e: RunHistoryEntry): RunSummary {
     nodeCount: e.meta.nodeCount,
     conduitCount: e.meta.conduitCount,
     durationSec: e.meta.durationMs / 1000,
+    steps: e.meta.steps,
+    optsJson: JSON.stringify(e.opts ?? {}),
   };
 }
+
 
 function buildExportPayload(
   a: RunHistoryEntry,
@@ -760,7 +884,7 @@ function buildCsv(p: ExportPayload): string {
   lines.push("");
   lines.push("section,field,run_a,run_b");
   const runFields: Array<keyof RunSummary> = [
-    "id", "label", "timestamp", "inputVersion", "engine", "nodeCount", "conduitCount", "durationSec",
+    "id", "label", "timestamp", "inputVersion", "engine", "nodeCount", "conduitCount", "durationSec", "steps", "optsJson",
   ];
   for (const f of runFields) {
     lines.push(`run_meta,${f},${csvEscape(p.runA[f])},${csvEscape(p.runB[f])}`);
@@ -785,4 +909,162 @@ function buildCsv(p: ExportPayload): string {
   }
   return lines.join("\n") + "\n";
 }
+
+// ---------- Import helpers ----------
+
+function parseImportJson(text: string): ExportPayload {
+  const raw = JSON.parse(text);
+  if (!raw || typeof raw !== "object" || !raw.runA || !raw.runB || !raw.metrics || !raw.nodeDiff) {
+    throw new Error("JSON is missing required fields (runA/runB/metrics/nodeDiff).");
+  }
+  return raw as ExportPayload;
+}
+
+function parseCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQ) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; }
+        else inQ = false;
+      } else cur += ch;
+    } else {
+      if (ch === ',') { out.push(cur); cur = ""; }
+      else if (ch === '"') inQ = true;
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+function coerceNumber(v: string): number | null {
+  if (v === "" || v === "null" || v === "undefined") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseImportCsv(text: string): ExportPayload {
+  const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
+  const metaMap: Record<string, [string, string]> = {};
+  const metricsArr: ExportPayload["metrics"] = [];
+  const nodeGroups: Record<string, string[]> = {
+    flooded_only_a: [], flooded_only_b: [], flooded_both: [],
+    surcharged_only_a: [], surcharged_only_b: [], surcharged_both: [],
+  };
+  let generatedAt = new Date().toISOString();
+  let section: "none" | "meta" | "metric" | "node" = "none";
+
+  for (const raw of lines) {
+    if (raw.startsWith("# generated_at")) {
+      const parts = parseCsvLine(raw.replace(/^#\s*/, ""));
+      if (parts[1]) generatedAt = parts[1];
+      continue;
+    }
+    if (raw.startsWith("#")) continue;
+    const cols = parseCsvLine(raw);
+    if (cols[0] === "section" && cols[1] === "field") { section = "meta"; continue; }
+    if (cols[0] === "metric" && cols[1] === "run_a") { section = "metric"; continue; }
+    if (cols[0] === "node_diff_group") { section = "node"; continue; }
+    if (section === "meta" && cols[0] === "run_meta") {
+      metaMap[cols[1]] = [cols[2] ?? "", cols[3] ?? ""];
+    } else if (section === "metric" && cols[0]) {
+      metricsArr.push({
+        metric: cols[0],
+        runA: coerceNumber(cols[1] ?? ""),
+        runB: coerceNumber(cols[2] ?? ""),
+        delta: coerceNumber(cols[3] ?? ""),
+      });
+    } else if (section === "node" && cols[0] && cols[1]) {
+      const g = nodeGroups[cols[0]];
+      if (g) g.push(cols[1]);
+    }
+  }
+
+  const makeSummary = (idx: 0 | 1): RunSummary => ({
+    id: metaMap.id?.[idx] || `imported_${idx}`,
+    label: metaMap.label?.[idx] || `Run ${idx === 0 ? "A" : "B"}`,
+    timestamp: metaMap.timestamp?.[idx] || new Date().toISOString(),
+    inputVersion: metaMap.inputVersion?.[idx] || "imported",
+    engine: metaMap.engine?.[idx] || "wasm",
+    nodeCount: Number(metaMap.nodeCount?.[idx] || 0),
+    conduitCount: Number(metaMap.conduitCount?.[idx] || 0),
+    durationSec: Number(metaMap.durationSec?.[idx] || 0),
+    steps: Number(metaMap.steps?.[idx] || 0),
+    optsJson: metaMap.optsJson?.[idx] || "{}",
+  });
+
+  return {
+    generatedAt,
+    runA: makeSummary(0),
+    runB: makeSummary(1),
+    metrics: metricsArr,
+    nodeDiff: {
+      flooded: {
+        onlyA: nodeGroups.flooded_only_a,
+        onlyB: nodeGroups.flooded_only_b,
+        both: nodeGroups.flooded_both,
+      },
+      surcharged: {
+        onlyA: nodeGroups.surcharged_only_a,
+        onlyB: nodeGroups.surcharged_only_b,
+        both: nodeGroups.surcharged_both,
+      },
+    },
+  };
+}
+
+function payloadToEntries(p: ExportPayload): [RunHistoryEntry, RunHistoryEntry] {
+  const metricByName = new Map(p.metrics.map((m) => [m.metric, m]));
+  const num = (name: string, side: "runA" | "runB"): number | null => {
+    const m = metricByName.get(name);
+    if (!m) return null;
+    const v = m[side];
+    return v == null ? null : Number(v);
+  };
+
+  const toEntry = (side: "runA" | "runB", summary: RunSummary): RunHistoryEntry => {
+    const isA = side === "runA";
+    const floodedIds = isA
+      ? [...p.nodeDiff.flooded.onlyA, ...p.nodeDiff.flooded.both]
+      : [...p.nodeDiff.flooded.onlyB, ...p.nodeDiff.flooded.both];
+    const surchargedIds = isA
+      ? [...p.nodeDiff.surcharged.onlyA, ...p.nodeDiff.surcharged.both]
+      : [...p.nodeDiff.surcharged.onlyB, ...p.nodeDiff.surcharged.both];
+    let opts: Partial<InpOptions> = {};
+    try { opts = JSON.parse(summary.optsJson || "{}"); } catch { /* ignore */ }
+    const stamp = Date.parse(summary.timestamp);
+    const engine: "wasm" | "stub" = summary.engine === "stub" ? "stub" : "wasm";
+    return {
+      id: `imported_${summary.id}`,
+      timestamp: Number.isFinite(stamp) ? stamp : Date.now(),
+      label: `${summary.label} · imported`,
+      inputVersion: summary.inputVersion,
+      opts,
+      meta: {
+        engine,
+        durationMs: (summary.durationSec || 0) * 1000,
+        nodeCount: summary.nodeCount || 0,
+        conduitCount: summary.conduitCount || 0,
+        steps: summary.steps || 0,
+      },
+      metrics: {
+        flowContinuityPct: num("flow_continuity_pct", side),
+        runoffContinuityPct: num("runoff_continuity_pct", side),
+        floodedNodes: num("flooded_nodes", side) ?? floodedIds.length,
+        surchargedNodes: num("surcharged_nodes", side) ?? surchargedIds.length,
+        maxSurchargeHours: num("max_surcharge_hours", side),
+        analysisErrors: num("analysis_errors", side) ?? 0,
+        floodedNodeIds: floodedIds,
+        surchargedNodeIds: surchargedIds,
+      },
+    };
+  };
+
+  return [toEntry("runA", p.runA), toEntry("runB", p.runB)];
+}
+
 
