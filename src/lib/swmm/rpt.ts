@@ -19,6 +19,7 @@ export interface RptSummary {
   // Simulation run
   runTimeSec: number | null;
   analysisErrors: string[];
+  analysisWarnings: string[];
 }
 
 export interface FloodedNode {
