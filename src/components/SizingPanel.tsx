@@ -31,33 +31,56 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
   const [pct, setPct] = useState<number>(0);
   const [auto, setAuto] = useState<AutoSizeOutcome | null>(null);
   const [compare, setCompare] = useState<{ uniform: ModeRunSummary; progressive: ModeRunSummary } | null>(null);
+  // Live-streaming state — updated as each attempt / mode row finishes.
+  const [liveAttempts, setLiveAttempts] = useState<SizingAttempt[]>([]);
+  const [liveCompare, setLiveCompare] = useState<Partial<{ uniform: ModeRunSummary; progressive: ModeRunSummary }>>({});
+  // Resume state — attempts loaded from a previously exported manifest.
+  const [resumeAttempts, setResumeAttempts] = useState<SizingAttempt[]>([]);
+  const [resumeCompare, setResumeCompare] = useState<Partial<{ uniform: ModeRunSummary; progressive: ModeRunSummary }>>({});
   const [err, setErr] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const resumeFileRef = useRef<HTMLInputElement | null>(null);
 
   const cancel = () => {
     abortRef.current?.abort();
     setProgress("cancelling…");
   };
 
-  const runAuto = async () => {
+  const runAuto = async (options: { fresh?: boolean } = {}) => {
     setRunning("auto");
     setErr(null);
     setAuto(null);
     setPct(0);
+    const prior = options.fresh ? [] : resumeAttempts;
+    setLiveAttempts([...prior]);
     const ac = new AbortController();
     abortRef.current = ac;
     try {
       const diameters = standardDiametersFor(opts.flowUnits);
-      const out = await autoSizeUniform(opts, constraints, diameters, (idx, total, a, epct) => {
-        const stepPct = ((idx - 1) + (epct ?? 0) / 100) / total * 100;
-        setPct(Math.min(99, stepPct));
-        setProgress(`try ${idx}/${total}: Ø${a.diameter}${a.reason === "running" ? ` · engine ${Math.round(epct ?? 0)}%` : ` → ${a.passed ? "OK" : a.reason}`}`);
-      }, ac.signal);
+      const out = await autoSizeUniform(
+        opts,
+        constraints,
+        diameters,
+        {
+          onProgress: (idx, total, a, epct) => {
+            const stepPct = ((idx - 1) + (epct ?? 0) / 100) / total * 100;
+            setPct(Math.min(99, stepPct));
+            setProgress(`try ${idx}/${total}: Ø${a.diameter}${a.reason === "running" ? ` · engine ${Math.round(epct ?? 0)}%` : ` → ${a.passed ? "OK" : a.reason || "fail"}`}`);
+          },
+          onAttempt: (attempt) => {
+            setLiveAttempts((prev) => [...prev, attempt]);
+          },
+        },
+        ac.signal,
+        prior,
+      );
       setPct(100);
       setAuto(out);
+      setLiveAttempts(out.attempts);
+      if (options.fresh) setResumeAttempts([]);
       if (out.finalResult) onResult?.(out.finalResult);
     } catch (e) {
-      if (e instanceof CancelledError) setErr("cancelled");
+      if (e instanceof CancelledError) setErr("cancelled — you can resume from the attempts above via Restart from here");
       else setErr((e as Error).message);
     } finally {
       setRunning(null);
@@ -66,23 +89,41 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
     }
   };
 
-  const runCompare = async () => {
+  const runCompare = async (options: { fresh?: boolean } = {}) => {
     setRunning("compare");
     setErr(null);
     setCompare(null);
     setPct(0);
+    const prior = options.fresh ? {} : resumeCompare;
+    setLiveCompare({ ...prior });
+    const skip: Array<"uniform" | "progressive"> = [];
+    if (prior.uniform) skip.push("uniform");
+    if (prior.progressive) skip.push("progressive");
     const ac = new AbortController();
     abortRef.current = ac;
     try {
-      const c = await compareDiameterModes(opts, (label, epct) => {
-        const base = label === "uniform" ? 0 : 50;
-        setPct(Math.min(99, base + (epct ?? 0) / 2));
-        setProgress(`running ${label}… ${Math.round(epct ?? 0)}%`);
-      }, ac.signal);
+      const c = await compareDiameterModes(
+        opts,
+        {
+          onProgress: (label, epct) => {
+            const base = label === "uniform" ? 0 : 50;
+            setPct(Math.min(99, base + (epct ?? 0) / 2));
+            setProgress(`running ${label}… ${Math.round(epct ?? 0)}%`);
+          },
+          onModeDone: (m) => {
+            setLiveCompare((prev) => ({ ...prev, [m.mode]: m }));
+          },
+        },
+        ac.signal,
+        skip,
+        prior,
+      );
       setPct(100);
       setCompare(c);
+      setLiveCompare(c);
+      if (options.fresh) setResumeCompare({});
     } catch (e) {
-      if (e instanceof CancelledError) setErr("cancelled");
+      if (e instanceof CancelledError) setErr("cancelled — you can resume from partial rows above");
       else setErr((e as Error).message);
     } finally {
       setRunning(null);
@@ -90,6 +131,76 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
       abortRef.current = null;
     }
   };
+
+  // Use the latest available data for rendering (live > completed).
+  const attemptsView: SizingAttempt[] = liveAttempts.length ? liveAttempts : (auto?.attempts ?? []);
+  const compareView = auto || compare
+    ? (compare ?? undefined)
+    : undefined;
+  const compareLive = liveCompare.uniform && liveCompare.progressive
+    ? { uniform: liveCompare.uniform, progressive: liveCompare.progressive }
+    : compareView;
+
+  const restartAutoFromHere = () => {
+    // Freeze current live attempts as the resume set and re-run — the engine
+    // will skip diameters already present and continue from the next one.
+    setResumeAttempts(liveAttempts.length ? liveAttempts : (auto?.attempts ?? []));
+    setAuto(null);
+    void runAuto();
+  };
+
+  const restartCompareFromHere = () => {
+    setResumeCompare(liveCompare);
+    setCompare(null);
+    void runCompare();
+  };
+
+  const onResumeFile = async (file: File) => {
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      if (json.kind === "auto_size_uniform" && Array.isArray(json.attempts)) {
+        setResumeAttempts(json.attempts as SizingAttempt[]);
+        setLiveAttempts(json.attempts as SizingAttempt[]);
+        setErr(null);
+      } else if (json.kind === "compare_uniform_vs_progressive") {
+        // Rebuild the ModeRunSummary shape enough for the compare table + skip.
+        const rebuild = (m: Record<string, unknown> | undefined, mode: "uniform" | "progressive"): ModeRunSummary | undefined => {
+          if (!m) return undefined;
+          return {
+            mode,
+            diameter: Number(m.diameter),
+            maxDepthRatio: Number(m.max_depth_ratio),
+            maxVelocity: Number(m.max_velocity),
+            flooded: Number(m.flooded),
+            maxSurchargeHours: m.max_surcharge_hours == null ? null : Number(m.max_surcharge_hours),
+            continuityPct: m.flow_continuity_pct == null ? null : Number(m.flow_continuity_pct),
+            runtimeMs: Number(m.runtime_ms),
+            engineExitCode: (m.engine_exit_code as number | null) ?? null,
+            analysisErrors: (m.analysis_errors as string[]) ?? [],
+            analysisWarnings: (m.analysis_warnings as string[]) ?? [],
+            engineLogTail: (m.engine_log_tail as string) ?? "",
+            // Placeholders — not needed for compare-only resume/display.
+            built: undefined as unknown as ModeRunSummary["built"],
+            result: undefined as unknown as ModeRunSummary["result"],
+            metrics: undefined as unknown as ModeRunSummary["metrics"],
+          };
+        };
+        const restored = {
+          uniform: rebuild(json.uniform, "uniform"),
+          progressive: rebuild(json.progressive, "progressive"),
+        };
+        setResumeCompare(restored);
+        setLiveCompare(restored);
+        setErr(null);
+      } else {
+        setErr("unrecognized manifest (expected sizing or compare manifest.json)");
+      }
+    } catch (e) {
+      setErr("failed to parse manifest: " + (e as Error).message);
+    }
+  };
+
 
   const unitLen = opts.flowUnits === "CFS" ? "ft" : "m";
   const unitVel = opts.flowUnits === "CFS" ? "ft/s" : "m/s";
@@ -133,8 +244,12 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
       max_surcharge_hours: m.maxSurchargeHours,
       flow_continuity_pct: m.continuityPct,
       runtime_ms: m.runtimeMs,
-      flooded_node_ids: m.metrics.floodedNodes.map((n) => n.id),
-      surcharged_node_ids: m.metrics.surchargedNodes.map((n) => n.id),
+      engine_exit_code: m.engineExitCode,
+      analysis_errors: m.analysisErrors,
+      analysis_warnings: m.analysisWarnings,
+      engine_log_tail: m.engineLogTail,
+      flooded_node_ids: m.metrics?.floodedNodes.map((n) => n.id) ?? [],
+      surcharged_node_ids: m.metrics?.surchargedNodes.map((n) => n.id) ?? [],
     });
     return {
       schema_version: "1.0" as const,
@@ -176,12 +291,18 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
 
   const downloadAutoCsv = () => {
     if (!auto) return;
-    const header = ["diameter", "flooded", "max_d_over_D", "max_velocity", "continuity_pct", "runtime_ms", "passed", "reason", "chosen"];
+    const header = ["diameter", "flooded", "max_d_over_D", "max_velocity", "continuity_pct", "runtime_ms", "exit_code", "analysis_errors", "analysis_warnings", "passed", "reason", "engine_log_tail", "chosen"];
     const rows = auto.attempts.map((a) => [
       a.diameter, a.flooded, a.maxDepthRatio.toFixed(4), a.maxVelocity.toFixed(4),
       a.continuityPct != null ? a.continuityPct.toFixed(4) : "",
-      a.runtimeMs.toFixed(0), a.passed ? "yes" : "no",
-      csvEscape(a.reason), auto.chosen?.diameter === a.diameter ? "yes" : "no",
+      a.runtimeMs.toFixed(0),
+      a.engineExitCode ?? "",
+      csvEscape((a.analysisErrors ?? []).join(" | ")),
+      csvEscape((a.analysisWarnings ?? []).join(" | ")),
+      a.passed ? "yes" : "no",
+      csvEscape(a.reason),
+      csvEscape(a.engineLogTail ?? ""),
+      auto.chosen?.diameter === a.diameter ? "yes" : "no",
     ]);
     const csv = [header, ...rows].map((r) => r.join(",")).join("\n");
     download(`sizing_attempts_n${opts.maxSeed}.csv`, csv, "text/csv");
@@ -315,9 +436,38 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
           </Field>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button onClick={runAuto} disabled={running !== null}>
-            {running === "auto" ? "Auto-sizing…" : "Run auto-size"}
+          <Button onClick={() => void runAuto({ fresh: true })} disabled={running !== null}>
+            {running === "auto" ? "Auto-sizing…" : resumeAttempts.length ? "Restart fresh" : "Run auto-size"}
           </Button>
+          {resumeAttempts.length > 0 && running === null && (
+            <Button size="sm" variant="secondary" onClick={() => void runAuto()}>
+              Resume from {resumeAttempts.length} attempt{resumeAttempts.length === 1 ? "" : "s"}
+            </Button>
+          )}
+          {attemptsView.length > 0 && running === null && (
+            <Button size="sm" variant="outline" onClick={restartAutoFromHere}>
+              Restart from here
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => resumeFileRef.current?.click()}
+            disabled={running !== null}
+          >
+            Load manifest…
+          </Button>
+          <input
+            ref={resumeFileRef}
+            type="file"
+            accept="application/json"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void onResumeFile(f);
+              e.currentTarget.value = "";
+            }}
+          />
           {auto && (
             <>
               <Button size="sm" variant="outline" onClick={downloadAutoManifest}>manifest.json</Button>
@@ -332,8 +482,13 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
             </span>
           )}
         </div>
-        {auto && auto.attempts.length > 0 && (
+        {attemptsView.length > 0 && (
           <div className="mt-3 overflow-auto rounded border border-border">
+            {running === "auto" && (
+              <div className="border-b border-border bg-muted/30 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                live · streaming {attemptsView.length} attempt{attemptsView.length === 1 ? "" : "s"} so far
+              </div>
+            )}
             <table className="w-full font-mono text-[11px]">
               <thead className="bg-muted/40 text-muted-foreground uppercase tracking-wider">
                 <tr>
@@ -342,21 +497,22 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
                   <Th>Max d/D</Th>
                   <Th>Max V ({unitVel})</Th>
                   <Th>Continuity %</Th>
+                  <Th>Exit</Th>
                   <Th>Runtime (ms)</Th>
                   <Th>Result</Th>
                 </tr>
               </thead>
               <tbody>
-                {auto.attempts.map((a, i) => (
+                {attemptsView.map((a, i) => (
                   <AttemptRow
                     key={i}
                     a={a}
-                    chosen={auto.chosen?.diameter === a.diameter}
+                    chosen={auto?.chosen?.diameter === a.diameter}
                   />
                 ))}
               </tbody>
             </table>
-            {auto.chosen && (
+            {auto?.chosen && (
               <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/20 p-2">
                 <Button
                   size="sm"
@@ -380,9 +536,19 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
           progressive sizing (Ø × √upstream nodes, capped by the max multiplier).
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={runCompare} disabled={running !== null}>
-            {running === "compare" ? "Comparing…" : "Compare modes"}
+          <Button onClick={() => void runCompare({ fresh: true })} disabled={running !== null}>
+            {running === "compare" ? "Comparing…" : (resumeCompare.uniform || resumeCompare.progressive) ? "Restart fresh" : "Compare modes"}
           </Button>
+          {(resumeCompare.uniform || resumeCompare.progressive) && running === null && (
+            <Button size="sm" variant="secondary" onClick={() => void runCompare()}>
+              Resume compare
+            </Button>
+          )}
+          {(liveCompare.uniform || liveCompare.progressive) && running === null && !compare && (
+            <Button size="sm" variant="outline" onClick={restartCompareFromHere}>
+              Restart from here
+            </Button>
+          )}
           {compare && (
             <>
               <Button size="sm" variant="outline" onClick={downloadCompareManifest}>manifest.json</Button>
@@ -390,8 +556,13 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
             </>
           )}
         </div>
-        {compare && (
+        {(liveCompare.uniform || liveCompare.progressive) && (
           <div className="mt-3 overflow-auto rounded border border-border">
+            {running === "compare" && (
+              <div className="border-b border-border bg-muted/30 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                live · {liveCompare.uniform ? "uniform ✓ " : "uniform… "}{liveCompare.progressive ? "progressive ✓" : "progressive…"}
+              </div>
+            )}
             <table className="w-full font-mono text-[11px]">
               <thead className="bg-muted/40 text-muted-foreground uppercase tracking-wider">
                 <tr>
@@ -402,23 +573,28 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
                 </tr>
               </thead>
               <tbody>
-                <CompareRow label="Base Ø" u={compare.uniform.diameter} p={compare.progressive.diameter} suffix={" " + unitLen} />
-                <CompareRow label="Max d/D" u={compare.uniform.maxDepthRatio} p={compare.progressive.maxDepthRatio} digits={2} highlight="lower" />
-                <CompareRow label={`Max V (${unitVel})`} u={compare.uniform.maxVelocity} p={compare.progressive.maxVelocity} digits={2} />
-                <CompareRow label="Flooded nodes" u={compare.uniform.flooded} p={compare.progressive.flooded} highlight="lower" />
-                <CompareRow label="Max surcharge (h)" u={compare.uniform.maxSurchargeHours ?? 0} p={compare.progressive.maxSurchargeHours ?? 0} digits={2} highlight="lower" />
-                <CompareRow label="Flow continuity %" u={compare.uniform.continuityPct ?? 0} p={compare.progressive.continuityPct ?? 0} digits={3} />
-                <CompareRow label="Runtime (ms)" u={compare.uniform.runtimeMs} p={compare.progressive.runtimeMs} digits={0} />
+                <CompareRow label="Base Ø" u={liveCompare.uniform?.diameter} p={liveCompare.progressive?.diameter} suffix={" " + unitLen} />
+                <CompareRow label="Max d/D" u={liveCompare.uniform?.maxDepthRatio} p={liveCompare.progressive?.maxDepthRatio} digits={2} highlight="lower" />
+                <CompareRow label={`Max V (${unitVel})`} u={liveCompare.uniform?.maxVelocity} p={liveCompare.progressive?.maxVelocity} digits={2} />
+                <CompareRow label="Flooded nodes" u={liveCompare.uniform?.flooded} p={liveCompare.progressive?.flooded} highlight="lower" />
+                <CompareRow label="Max surcharge (h)" u={liveCompare.uniform?.maxSurchargeHours ?? undefined} p={liveCompare.progressive?.maxSurchargeHours ?? undefined} digits={2} highlight="lower" />
+                <CompareRow label="Flow continuity %" u={liveCompare.uniform?.continuityPct ?? undefined} p={liveCompare.progressive?.continuityPct ?? undefined} digits={3} />
+                <CompareRow label="Exit code" u={liveCompare.uniform?.engineExitCode ?? undefined} p={liveCompare.progressive?.engineExitCode ?? undefined} digits={0} />
+                <CompareRow label="Solver errors" u={liveCompare.uniform?.analysisErrors.length} p={liveCompare.progressive?.analysisErrors.length} highlight="lower" />
+                <CompareRow label="Solver warnings" u={liveCompare.uniform?.analysisWarnings.length} p={liveCompare.progressive?.analysisWarnings.length} />
+                <CompareRow label="Runtime (ms)" u={liveCompare.uniform?.runtimeMs} p={liveCompare.progressive?.runtimeMs} digits={0} />
               </tbody>
             </table>
-            <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/20 p-2">
-              <Button size="sm" variant="outline" onClick={() => onApplyDiameter(compare.uniform.diameter, false)}>
-                Apply uniform
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => onApplyDiameter(compare.progressive.diameter, true)}>
-                Apply progressive
-              </Button>
-            </div>
+            {compare && (
+              <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/20 p-2">
+                <Button size="sm" variant="outline" onClick={() => onApplyDiameter(compare.uniform.diameter, false)}>
+                  Apply uniform
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => onApplyDiameter(compare.progressive.diameter, true)}>
+                  Apply progressive
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -474,13 +650,22 @@ function AttemptRow({ a, chosen }: { a: SizingAttempt; chosen: boolean }) {
     : a.passed
       ? "text-foreground"
       : "text-muted-foreground";
+  const errCount = a.analysisErrors?.length ?? 0;
+  const warnCount = a.analysisWarnings?.length ?? 0;
+  const tooltip = [
+    a.engineFailReason ? `engine: ${a.engineFailReason}` : null,
+    errCount ? `errors:\n${a.analysisErrors!.slice(0, 5).join("\n")}` : null,
+    warnCount ? `warnings:\n${a.analysisWarnings!.slice(0, 5).join("\n")}` : null,
+    a.engineLogTail ? `log:\n${a.engineLogTail}` : null,
+  ].filter(Boolean).join("\n\n");
   return (
-    <tr className={`border-t border-border ${cls}`}>
+    <tr className={`border-t border-border ${cls}`} title={tooltip || undefined}>
       <td className="px-2 py-1">{a.diameter}</td>
       <td className="px-2 py-1">{a.flooded}</td>
       <td className="px-2 py-1">{a.maxDepthRatio.toFixed(2)}</td>
       <td className="px-2 py-1">{a.maxVelocity.toFixed(2)}</td>
       <td className="px-2 py-1">{a.continuityPct != null ? a.continuityPct.toFixed(3) : "—"}</td>
+      <td className="px-2 py-1">{a.engineExitCode ?? "—"}</td>
       <td className="px-2 py-1">{a.runtimeMs.toFixed(0)}</td>
       <td className="px-2 py-1">
         {a.passed ? (
@@ -488,7 +673,14 @@ function AttemptRow({ a, chosen }: { a: SizingAttempt; chosen: boolean }) {
             {chosen ? "chosen" : "pass"}
           </span>
         ) : (
-          <span className="text-accent">{a.reason}</span>
+          <span className="text-accent">
+            {a.reason}
+            {(errCount || warnCount) ? (
+              <span className="ml-1 text-muted-foreground">
+                {errCount ? ` · ${errCount} err` : ""}{warnCount ? ` · ${warnCount} warn` : ""}
+              </span>
+            ) : null}
+          </span>
         )}
       </td>
     </tr>
@@ -498,22 +690,23 @@ function AttemptRow({ a, chosen }: { a: SizingAttempt; chosen: boolean }) {
 function CompareRow({
   label, u, p, digits = 0, suffix = "", highlight,
 }: {
-  label: string; u: number; p: number; digits?: number; suffix?: string;
+  label: string; u: number | undefined; p: number | undefined; digits?: number; suffix?: string;
   highlight?: "lower" | "higher";
 }) {
-  const delta = p - u;
-  const better =
-    highlight === "lower" ? (delta < 0 ? "p" : delta > 0 ? "u" : null)
+  const both = u != null && p != null;
+  const delta = both ? (p as number) - (u as number) : 0;
+  const better = !both ? null
+    : highlight === "lower" ? (delta < 0 ? "p" : delta > 0 ? "u" : null)
     : highlight === "higher" ? (delta > 0 ? "p" : delta < 0 ? "u" : null)
     : null;
-  const fmt = (n: number) => n.toFixed(digits) + suffix;
+  const fmt = (n: number | undefined) => (n == null ? "…" : n.toFixed(digits) + suffix);
   return (
     <tr className="border-t border-border">
       <td className="px-2 py-1 text-muted-foreground">{label}</td>
       <td className={`px-2 py-1 ${better === "u" ? "text-primary" : ""}`}>{fmt(u)}</td>
       <td className={`px-2 py-1 ${better === "p" ? "text-primary" : ""}`}>{fmt(p)}</td>
-      <td className={`px-2 py-1 ${delta === 0 ? "text-muted-foreground" : delta > 0 ? "text-accent" : "text-primary"}`}>
-        {delta > 0 ? "+" : ""}{fmt(delta)}
+      <td className={`px-2 py-1 ${!both ? "text-muted-foreground" : delta === 0 ? "text-muted-foreground" : delta > 0 ? "text-accent" : "text-primary"}`}>
+        {both ? `${delta > 0 ? "+" : ""}${fmt(delta)}` : "—"}
       </td>
     </tr>
   );

@@ -40,6 +40,7 @@ export interface EngineResult {
   engine: "wasm";
   log: string;
   durationMs: number;
+  exitCode: number | null;
 }
 
 declare global {
@@ -221,6 +222,7 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
       engine: "wasm",
       log: log.join("\n"),
       durationMs: performance.now() - t0,
+      exitCode: rc,
     };
   } catch (e) {
     log.push("wasm error: " + (e as Error).message);
@@ -237,6 +239,7 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
       engine: "wasm",
       log: log.join("\n"),
       durationMs: performance.now() - t0,
+      exitCode: null,
     };
   } finally {
     if (origPrint) (mod as unknown as { print: (s: string) => void }).print = origPrint;
@@ -271,6 +274,7 @@ function parseOutBufferToResult(
   outBuf: ArrayBuffer | null,
   durationMs: number,
   logLines: string[],
+  exitCode: number | null,
 ): EngineResult {
   const times: number[] = [];
   const series: NodeSeries[] = [];
@@ -337,6 +341,7 @@ function parseOutBufferToResult(
     engine: "wasm",
     log: logLines.join("\n"),
     durationMs,
+    exitCode,
   };
 }
 
@@ -378,7 +383,7 @@ export function startEngine(built: BuildResult, cb: EngineRunCallbacks = {}): En
         reject(new Error("EPA SWMM5 WASM worker failed: " + msg.message));
       } else if (msg.type === "done") {
         logLines.push(`swmm_run returned ${msg.rc}`);
-        const result = parseOutBufferToResult(built, msg.rpt, msg.out, msg.durationMs || (performance.now() - t0), logLines);
+        const result = parseOutBufferToResult(built, msg.rpt, msg.out, msg.durationMs || (performance.now() - t0), logLines, msg.rc);
         worker?.terminate();
         worker = null;
         cb.onProgress?.(100);

@@ -19,6 +19,7 @@ export interface RptSummary {
   // Simulation run
   runTimeSec: number | null;
   analysisErrors: string[];
+  analysisWarnings: string[];
 }
 
 export interface FloodedNode {
@@ -63,6 +64,7 @@ export function parseRptSummary(rpt: string): RptSummary {
     maxSurchargeHours: null,
     runTimeSec: null,
     analysisErrors: [],
+    analysisWarnings: [],
   };
   if (!rpt) return out;
 
@@ -119,9 +121,10 @@ export function parseRptSummary(rpt: string): RptSummary {
     if (out.surchargedNodes.length) out.maxSurchargeHours = maxH;
   }
 
-  // Analysis errors are printed as lines starting with "ERROR" or "WARNING"
+  // Analysis errors/warnings are printed as lines starting with "ERROR" or "WARNING"
   for (const line of rpt.split(/\r?\n/)) {
     if (/^\s*ERROR\b/i.test(line)) out.analysisErrors.push(line.trim());
+    else if (/^\s*WARNING\b/i.test(line)) out.analysisWarnings.push(line.trim());
   }
 
   const rt = /Total elapsed time[^\n]*?(\d+:\d\d:\d\d(?:\.\d+)?)/i.exec(rpt);
