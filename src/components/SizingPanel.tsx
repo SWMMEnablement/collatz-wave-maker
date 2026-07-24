@@ -31,33 +31,56 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
   const [pct, setPct] = useState<number>(0);
   const [auto, setAuto] = useState<AutoSizeOutcome | null>(null);
   const [compare, setCompare] = useState<{ uniform: ModeRunSummary; progressive: ModeRunSummary } | null>(null);
+  // Live-streaming state — updated as each attempt / mode row finishes.
+  const [liveAttempts, setLiveAttempts] = useState<SizingAttempt[]>([]);
+  const [liveCompare, setLiveCompare] = useState<Partial<{ uniform: ModeRunSummary; progressive: ModeRunSummary }>>({});
+  // Resume state — attempts loaded from a previously exported manifest.
+  const [resumeAttempts, setResumeAttempts] = useState<SizingAttempt[]>([]);
+  const [resumeCompare, setResumeCompare] = useState<Partial<{ uniform: ModeRunSummary; progressive: ModeRunSummary }>>({});
   const [err, setErr] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const resumeFileRef = useRef<HTMLInputElement | null>(null);
 
   const cancel = () => {
     abortRef.current?.abort();
     setProgress("cancelling…");
   };
 
-  const runAuto = async () => {
+  const runAuto = async (options: { fresh?: boolean } = {}) => {
     setRunning("auto");
     setErr(null);
     setAuto(null);
     setPct(0);
+    const prior = options.fresh ? [] : resumeAttempts;
+    setLiveAttempts([...prior]);
     const ac = new AbortController();
     abortRef.current = ac;
     try {
       const diameters = standardDiametersFor(opts.flowUnits);
-      const out = await autoSizeUniform(opts, constraints, diameters, (idx, total, a, epct) => {
-        const stepPct = ((idx - 1) + (epct ?? 0) / 100) / total * 100;
-        setPct(Math.min(99, stepPct));
-        setProgress(`try ${idx}/${total}: Ø${a.diameter}${a.reason === "running" ? ` · engine ${Math.round(epct ?? 0)}%` : ` → ${a.passed ? "OK" : a.reason}`}`);
-      }, ac.signal);
+      const out = await autoSizeUniform(
+        opts,
+        constraints,
+        diameters,
+        {
+          onProgress: (idx, total, a, epct) => {
+            const stepPct = ((idx - 1) + (epct ?? 0) / 100) / total * 100;
+            setPct(Math.min(99, stepPct));
+            setProgress(`try ${idx}/${total}: Ø${a.diameter}${a.reason === "running" ? ` · engine ${Math.round(epct ?? 0)}%` : ` → ${a.passed ? "OK" : a.reason || "fail"}`}`);
+          },
+          onAttempt: (attempt) => {
+            setLiveAttempts((prev) => [...prev, attempt]);
+          },
+        },
+        ac.signal,
+        prior,
+      );
       setPct(100);
       setAuto(out);
+      setLiveAttempts(out.attempts);
+      if (options.fresh) setResumeAttempts([]);
       if (out.finalResult) onResult?.(out.finalResult);
     } catch (e) {
-      if (e instanceof CancelledError) setErr("cancelled");
+      if (e instanceof CancelledError) setErr("cancelled — you can resume from the attempts above via Restart from here");
       else setErr((e as Error).message);
     } finally {
       setRunning(null);
@@ -66,23 +89,41 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
     }
   };
 
-  const runCompare = async () => {
+  const runCompare = async (options: { fresh?: boolean } = {}) => {
     setRunning("compare");
     setErr(null);
     setCompare(null);
     setPct(0);
+    const prior = options.fresh ? {} : resumeCompare;
+    setLiveCompare({ ...prior });
+    const skip: Array<"uniform" | "progressive"> = [];
+    if (prior.uniform) skip.push("uniform");
+    if (prior.progressive) skip.push("progressive");
     const ac = new AbortController();
     abortRef.current = ac;
     try {
-      const c = await compareDiameterModes(opts, (label, epct) => {
-        const base = label === "uniform" ? 0 : 50;
-        setPct(Math.min(99, base + (epct ?? 0) / 2));
-        setProgress(`running ${label}… ${Math.round(epct ?? 0)}%`);
-      }, ac.signal);
+      const c = await compareDiameterModes(
+        opts,
+        {
+          onProgress: (label, epct) => {
+            const base = label === "uniform" ? 0 : 50;
+            setPct(Math.min(99, base + (epct ?? 0) / 2));
+            setProgress(`running ${label}… ${Math.round(epct ?? 0)}%`);
+          },
+          onModeDone: (m) => {
+            setLiveCompare((prev) => ({ ...prev, [m.mode]: m }));
+          },
+        },
+        ac.signal,
+        skip,
+        prior,
+      );
       setPct(100);
       setCompare(c);
+      setLiveCompare(c);
+      if (options.fresh) setResumeCompare({});
     } catch (e) {
-      if (e instanceof CancelledError) setErr("cancelled");
+      if (e instanceof CancelledError) setErr("cancelled — you can resume from partial rows above");
       else setErr((e as Error).message);
     } finally {
       setRunning(null);
@@ -90,6 +131,76 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
       abortRef.current = null;
     }
   };
+
+  // Use the latest available data for rendering (live > completed).
+  const attemptsView: SizingAttempt[] = liveAttempts.length ? liveAttempts : (auto?.attempts ?? []);
+  const compareView = auto || compare
+    ? (compare ?? undefined)
+    : undefined;
+  const compareLive = liveCompare.uniform && liveCompare.progressive
+    ? { uniform: liveCompare.uniform, progressive: liveCompare.progressive }
+    : compareView;
+
+  const restartAutoFromHere = () => {
+    // Freeze current live attempts as the resume set and re-run — the engine
+    // will skip diameters already present and continue from the next one.
+    setResumeAttempts(liveAttempts.length ? liveAttempts : (auto?.attempts ?? []));
+    setAuto(null);
+    void runAuto();
+  };
+
+  const restartCompareFromHere = () => {
+    setResumeCompare(liveCompare);
+    setCompare(null);
+    void runCompare();
+  };
+
+  const onResumeFile = async (file: File) => {
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      if (json.kind === "auto_size_uniform" && Array.isArray(json.attempts)) {
+        setResumeAttempts(json.attempts as SizingAttempt[]);
+        setLiveAttempts(json.attempts as SizingAttempt[]);
+        setErr(null);
+      } else if (json.kind === "compare_uniform_vs_progressive") {
+        // Rebuild the ModeRunSummary shape enough for the compare table + skip.
+        const rebuild = (m: Record<string, unknown> | undefined, mode: "uniform" | "progressive"): ModeRunSummary | undefined => {
+          if (!m) return undefined;
+          return {
+            mode,
+            diameter: Number(m.diameter),
+            maxDepthRatio: Number(m.max_depth_ratio),
+            maxVelocity: Number(m.max_velocity),
+            flooded: Number(m.flooded),
+            maxSurchargeHours: m.max_surcharge_hours == null ? null : Number(m.max_surcharge_hours),
+            continuityPct: m.flow_continuity_pct == null ? null : Number(m.flow_continuity_pct),
+            runtimeMs: Number(m.runtime_ms),
+            engineExitCode: (m.engine_exit_code as number | null) ?? null,
+            analysisErrors: (m.analysis_errors as string[]) ?? [],
+            analysisWarnings: (m.analysis_warnings as string[]) ?? [],
+            engineLogTail: (m.engine_log_tail as string) ?? "",
+            // Placeholders — not needed for compare-only resume/display.
+            built: undefined as unknown as ModeRunSummary["built"],
+            result: undefined as unknown as ModeRunSummary["result"],
+            metrics: undefined as unknown as ModeRunSummary["metrics"],
+          };
+        };
+        const restored = {
+          uniform: rebuild(json.uniform, "uniform"),
+          progressive: rebuild(json.progressive, "progressive"),
+        };
+        setResumeCompare(restored);
+        setLiveCompare(restored);
+        setErr(null);
+      } else {
+        setErr("unrecognized manifest (expected sizing or compare manifest.json)");
+      }
+    } catch (e) {
+      setErr("failed to parse manifest: " + (e as Error).message);
+    }
+  };
+
 
   const unitLen = opts.flowUnits === "CFS" ? "ft" : "m";
   const unitVel = opts.flowUnits === "CFS" ? "ft/s" : "m/s";
