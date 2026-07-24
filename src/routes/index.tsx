@@ -312,6 +312,16 @@ function Page() {
                   />
                 </div>
               </TabsContent>
+              <TabsContent value="compare" className="mt-3">
+                <div className="h-[75vh] min-h-[520px]">
+                  <ComparePanel
+                    entries={history.entries}
+                    thresholds={thresholds}
+                    onReopen={reopenRun}
+                    hasStoredResult={(id) => !!history.getResult(id)}
+                  />
+                </div>
+              </TabsContent>
               <TabsContent value="docs" className="mt-3">
                 <div className="h-[75vh] min-h-[520px]">
                   <DocsView opts={opts} />
