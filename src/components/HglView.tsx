@@ -323,8 +323,10 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
         <Legend swatch="oklch(0.6 0.03 60)" label="pipe crown" dashed />
         <Legend swatch="oklch(0.7 0.05 60)" label="invert" />
         <Legend swatch="oklch(0.78 0.2 230)" label={hasEngine ? "hgl (depth from engine)" : "hgl (∝ ΣDWF)"} />
-        {hasEngine && <Legend swatch="oklch(0.72 0.22 25)" label="surcharged" />}
+        {hasEngine && <Legend swatch="oklch(0.82 0.18 65)" label="surcharged" />}
+        {hasEngine && <Legend swatch="oklch(0.72 0.22 25)" label="flooded" />}
       </div>
+
 
       {hasEngine && (
         <div className="absolute inset-x-3 bottom-3 flex items-center gap-3 rounded-md border border-border bg-background/85 px-3 py-2 backdrop-blur">
