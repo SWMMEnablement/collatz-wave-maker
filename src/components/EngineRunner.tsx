@@ -70,16 +70,15 @@ export function EngineRunner({
   const [err, setErr] = useState<string | null>(null);
   const [metric, setMetric] = useState<Metric>("depth");
   const [wasmStatus, setWasmStatus] = useState<"checking" | "ready" | "error">("checking");
+  const [provenance, setProvenance] = useState<EngineProvenance | null>(null);
 
   useEffect(() => {
     let active = true;
-    fetch("/wasm/swmm5.js", { method: "HEAD" })
-      .then((res) => {
-        if (active) setWasmStatus(res.ok ? "ready" : "error");
-      })
-      .catch(() => {
-        if (active) setWasmStatus("error");
-      });
+    getEngineProvenance().then((p) => {
+      if (!active) return;
+      setProvenance(p);
+      setWasmStatus(p.status === "ready" ? "ready" : p.status === "checking" ? "checking" : "error");
+    });
     return () => {
       active = false;
     };
@@ -184,6 +183,21 @@ export function EngineRunner({
     triggerDownload(
       new Blob([JSON.stringify(summary, null, 2)], { type: "application/json" }),
       "swmm5_summary.json",
+    );
+  };
+
+  const downloadManifest = async () => {
+    const prov = provenance ?? (await getEngineProvenance());
+    const metrics = result ? parseRptSummary(result.rpt) : null;
+    const manifest = await buildManifest(
+      opts,
+      built,
+      prov,
+      result && metrics ? { result, metrics } : undefined,
+    );
+    triggerDownload(
+      new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" }),
+      `collatz_run_manifest_n${opts.maxSeed}.json`,
     );
   };
 
