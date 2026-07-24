@@ -40,6 +40,7 @@ export interface EngineResult {
   engine: "wasm";
   log: string;
   durationMs: number;
+  exitCode: number | null;
 }
 
 declare global {
