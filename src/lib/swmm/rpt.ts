@@ -64,6 +64,7 @@ export function parseRptSummary(rpt: string): RptSummary {
     maxSurchargeHours: null,
     runTimeSec: null,
     analysisErrors: [],
+    analysisWarnings: [],
   };
   if (!rpt) return out;
 
