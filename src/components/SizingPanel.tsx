@@ -526,9 +526,19 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
           progressive sizing (Ø × √upstream nodes, capped by the max multiplier).
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={runCompare} disabled={running !== null}>
-            {running === "compare" ? "Comparing…" : "Compare modes"}
+          <Button onClick={() => void runCompare({ fresh: true })} disabled={running !== null}>
+            {running === "compare" ? "Comparing…" : (resumeCompare.uniform || resumeCompare.progressive) ? "Restart fresh" : "Compare modes"}
           </Button>
+          {(resumeCompare.uniform || resumeCompare.progressive) && running === null && (
+            <Button size="sm" variant="secondary" onClick={() => void runCompare()}>
+              Resume compare
+            </Button>
+          )}
+          {(liveCompare.uniform || liveCompare.progressive) && running === null && !compare && (
+            <Button size="sm" variant="outline" onClick={restartCompareFromHere}>
+              Restart from here
+            </Button>
+          )}
           {compare && (
             <>
               <Button size="sm" variant="outline" onClick={downloadCompareManifest}>manifest.json</Button>
@@ -536,8 +546,13 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
             </>
           )}
         </div>
-        {compare && (
+        {(liveCompare.uniform || liveCompare.progressive) && (
           <div className="mt-3 overflow-auto rounded border border-border">
+            {running === "compare" && (
+              <div className="border-b border-border bg-muted/30 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                live · {liveCompare.uniform ? "uniform ✓ " : "uniform… "}{liveCompare.progressive ? "progressive ✓" : "progressive…"}
+              </div>
+            )}
             <table className="w-full font-mono text-[11px]">
               <thead className="bg-muted/40 text-muted-foreground uppercase tracking-wider">
                 <tr>
@@ -548,23 +563,28 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
                 </tr>
               </thead>
               <tbody>
-                <CompareRow label="Base Ø" u={compare.uniform.diameter} p={compare.progressive.diameter} suffix={" " + unitLen} />
-                <CompareRow label="Max d/D" u={compare.uniform.maxDepthRatio} p={compare.progressive.maxDepthRatio} digits={2} highlight="lower" />
-                <CompareRow label={`Max V (${unitVel})`} u={compare.uniform.maxVelocity} p={compare.progressive.maxVelocity} digits={2} />
-                <CompareRow label="Flooded nodes" u={compare.uniform.flooded} p={compare.progressive.flooded} highlight="lower" />
-                <CompareRow label="Max surcharge (h)" u={compare.uniform.maxSurchargeHours ?? 0} p={compare.progressive.maxSurchargeHours ?? 0} digits={2} highlight="lower" />
-                <CompareRow label="Flow continuity %" u={compare.uniform.continuityPct ?? 0} p={compare.progressive.continuityPct ?? 0} digits={3} />
-                <CompareRow label="Runtime (ms)" u={compare.uniform.runtimeMs} p={compare.progressive.runtimeMs} digits={0} />
+                <CompareRow label="Base Ø" u={liveCompare.uniform?.diameter} p={liveCompare.progressive?.diameter} suffix={" " + unitLen} />
+                <CompareRow label="Max d/D" u={liveCompare.uniform?.maxDepthRatio} p={liveCompare.progressive?.maxDepthRatio} digits={2} highlight="lower" />
+                <CompareRow label={`Max V (${unitVel})`} u={liveCompare.uniform?.maxVelocity} p={liveCompare.progressive?.maxVelocity} digits={2} />
+                <CompareRow label="Flooded nodes" u={liveCompare.uniform?.flooded} p={liveCompare.progressive?.flooded} highlight="lower" />
+                <CompareRow label="Max surcharge (h)" u={liveCompare.uniform?.maxSurchargeHours ?? undefined} p={liveCompare.progressive?.maxSurchargeHours ?? undefined} digits={2} highlight="lower" />
+                <CompareRow label="Flow continuity %" u={liveCompare.uniform?.continuityPct ?? undefined} p={liveCompare.progressive?.continuityPct ?? undefined} digits={3} />
+                <CompareRow label="Exit code" u={liveCompare.uniform?.engineExitCode ?? undefined} p={liveCompare.progressive?.engineExitCode ?? undefined} digits={0} />
+                <CompareRow label="Solver errors" u={liveCompare.uniform?.analysisErrors.length} p={liveCompare.progressive?.analysisErrors.length} highlight="lower" />
+                <CompareRow label="Solver warnings" u={liveCompare.uniform?.analysisWarnings.length} p={liveCompare.progressive?.analysisWarnings.length} />
+                <CompareRow label="Runtime (ms)" u={liveCompare.uniform?.runtimeMs} p={liveCompare.progressive?.runtimeMs} digits={0} />
               </tbody>
             </table>
-            <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/20 p-2">
-              <Button size="sm" variant="outline" onClick={() => onApplyDiameter(compare.uniform.diameter, false)}>
-                Apply uniform
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => onApplyDiameter(compare.progressive.diameter, true)}>
-                Apply progressive
-              </Button>
-            </div>
+            {compare && (
+              <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/20 p-2">
+                <Button size="sm" variant="outline" onClick={() => onApplyDiameter(compare.uniform.diameter, false)}>
+                  Apply uniform
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => onApplyDiameter(compare.progressive.diameter, true)}>
+                  Apply progressive
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>
