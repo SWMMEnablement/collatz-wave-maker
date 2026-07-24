@@ -236,7 +236,14 @@ function Page() {
               )}
               <div className="pt-1">engine: <span className="text-primary">EPA SWMM 5.2.4 · WASM</span></div>
               <div>inp size: <span className="text-primary">{(new Blob([built.inp]).size / 1024).toFixed(1)} KiB</span></div>
-              <div>integer mode: <span className="text-primary">Number (f64)</span> · cap 100k/seed</div>
+              <div>integer mode: <span className={built.tree.diagnostics.safeIntegerOk ? "text-primary" : "text-destructive"}>BigInt-guarded · f64 keys</span> · cap {built.tree.diagnostics.iterationCap.toLocaleString()}/seed</div>
+              <div>max trajectory value: <span className="text-primary" title={built.tree.diagnostics.maxTrajectoryValue}>{shortNumber(built.tree.diagnostics.maxTrajectoryValue)}</span></div>
+              {built.tree.diagnostics.unsafeTruncatedSeeds.length > 0 && (
+                <div className="text-destructive">unsafe-integer truncated: {built.tree.diagnostics.unsafeTruncatedSeeds.length} seed(s)</div>
+              )}
+              {built.tree.diagnostics.iterationCappedSeeds.length > 0 && (
+                <div className="text-accent">iteration-capped: {built.tree.diagnostics.iterationCappedSeeds.length} seed(s)</div>
+              )}
               {opts.maxSeed >= 2000 && (
                 <div className="text-accent">large-model warning: {opts.maxSeed} seeds may slow the browser</div>
               )}
