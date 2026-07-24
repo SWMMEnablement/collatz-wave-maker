@@ -309,7 +309,10 @@ function parseOutBufferToResult(
           from: e ? e[0] : -1,
           to: e ? e[1] : -1,
           flow: Array.from(parsed.linkFlow[i]),
+          depth: Array.from(parsed.linkDepth[i]),
+          velocity: Array.from(parsed.linkVelocity[i]),
         });
+
       }
       system = {
         rainfall: Array.from(parsed.sysVars[1]),
