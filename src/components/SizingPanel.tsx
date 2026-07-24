@@ -472,8 +472,13 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
             </span>
           )}
         </div>
-        {auto && auto.attempts.length > 0 && (
+        {attemptsView.length > 0 && (
           <div className="mt-3 overflow-auto rounded border border-border">
+            {running === "auto" && (
+              <div className="border-b border-border bg-muted/30 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                live · streaming {attemptsView.length} attempt{attemptsView.length === 1 ? "" : "s"} so far
+              </div>
+            )}
             <table className="w-full font-mono text-[11px]">
               <thead className="bg-muted/40 text-muted-foreground uppercase tracking-wider">
                 <tr>
@@ -482,21 +487,22 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
                   <Th>Max d/D</Th>
                   <Th>Max V ({unitVel})</Th>
                   <Th>Continuity %</Th>
+                  <Th>Exit</Th>
                   <Th>Runtime (ms)</Th>
                   <Th>Result</Th>
                 </tr>
               </thead>
               <tbody>
-                {auto.attempts.map((a, i) => (
+                {attemptsView.map((a, i) => (
                   <AttemptRow
                     key={i}
                     a={a}
-                    chosen={auto.chosen?.diameter === a.diameter}
+                    chosen={auto?.chosen?.diameter === a.diameter}
                   />
                 ))}
               </tbody>
             </table>
-            {auto.chosen && (
+            {auto?.chosen && (
               <div className="flex items-center justify-end gap-2 border-t border-border bg-muted/20 p-2">
                 <Button
                   size="sm"
