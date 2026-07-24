@@ -90,6 +90,29 @@ export function ComparePanel({ entries, thresholds, onReopen, hasStoredResult }:
     return { flooded, surcharged };
   }, [a, b]);
 
+  const builtA = useMemo(() => (a ? buildInp({ ...defaultOptions, ...a.opts } as InpOptions) : null), [a]);
+  const builtB = useMemo(() => (b ? buildInp({ ...defaultOptions, ...b.opts } as InpOptions) : null), [b]);
+
+  const [overlayMetric, setOverlayMetric] = useState<"flooded" | "surcharged">("flooded");
+  const overlayDiff = overlayMetric === "flooded" ? nodeDiff.flooded : nodeDiff.surcharged;
+
+  const exportComparison = (format: "csv" | "json") => {
+    if (!a || !b) return;
+    const payload = buildExportPayload(a, b, nodeDiff);
+    const [content, mime, ext] =
+      format === "json"
+        ? [JSON.stringify(payload, null, 2), "application/json", "json"]
+        : [buildCsv(payload), "text/csv", "csv"];
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `compare_${a.label}_vs_${b.label}_${Date.now()}.${ext}`.replace(/\s+/g, "");
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+
   if (entries.length < 2) {
     return (
       <div className="flex h-full items-center justify-center rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
