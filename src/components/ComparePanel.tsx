@@ -7,6 +7,7 @@ import {
   type Thresholds,
 } from "@/lib/thresholds";
 import type { RunHistoryEntry } from "@/lib/runHistory";
+import { buildInp, defaultOptions, type BuildResult, type InpOptions } from "@/lib/swmm/inp";
 
 interface Props {
   entries: RunHistoryEntry[];
@@ -15,25 +16,61 @@ interface Props {
   hasStoredResult: (id: string) => boolean;
 }
 
+const SELECTION_KEY = "collatz-swmm.compare.selection.v1";
+
+function loadSelection(): { a: string; b: string } {
+  if (typeof window === "undefined") return { a: "", b: "" };
+  try {
+    const raw = window.localStorage.getItem(SELECTION_KEY);
+    if (!raw) return { a: "", b: "" };
+    const p = JSON.parse(raw);
+    return { a: typeof p?.a === "string" ? p.a : "", b: typeof p?.b === "string" ? p.b : "" };
+  } catch {
+    return { a: "", b: "" };
+  }
+}
+
 export function ComparePanel({ entries, thresholds, onReopen, hasStoredResult }: Props) {
   const [aId, setAId] = useState<string>("");
   const [bId, setBId] = useState<string>("");
+  const [hydrated, setHydrated] = useState(false);
+
+  // Hydrate persisted selection once, then reconcile against current entries.
+  useEffect(() => {
+    const s = loadSelection();
+    setAId(s.a);
+    setBId(s.b);
+    setHydrated(true);
+  }, []);
 
   useEffect(() => {
-    if (entries.length >= 2) {
-      setAId((prev) => (prev && entries.some((e) => e.id === prev) ? prev : entries[0].id));
-      setBId((prev) => (prev && entries.some((e) => e.id === prev) ? prev : entries[1].id));
-    } else if (entries.length === 1) {
-      setAId(entries[0].id);
-      setBId("");
-    } else {
-      setAId("");
-      setBId("");
+    if (!hydrated) return;
+    const has = (id: string) => !!id && entries.some((e) => e.id === id);
+    setAId((prev) => {
+      if (has(prev)) return prev;
+      return entries[0]?.id ?? "";
+    });
+    setBId((prev) => {
+      if (has(prev) && prev !== (entries[0]?.id ?? "")) return prev;
+      const alt = entries.find((e) => e.id !== (aId || entries[0]?.id));
+      return alt?.id ?? "";
+    });
+    // aId intentionally omitted — we only want to auto-heal when entries change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      window.localStorage.setItem(SELECTION_KEY, JSON.stringify({ a: aId, b: bId }));
+    } catch {
+      /* ignore quota */
     }
-  }, [entries]);
+  }, [aId, bId, hydrated]);
 
   const a = entries.find((e) => e.id === aId);
   const b = entries.find((e) => e.id === bId);
+
 
   const nodeDiff = useMemo(() => {
     const aFl = new Set(a?.metrics.floodedNodeIds ?? []);
@@ -53,6 +90,29 @@ export function ComparePanel({ entries, thresholds, onReopen, hasStoredResult }:
     return { flooded, surcharged };
   }, [a, b]);
 
+  const builtA = useMemo(() => (a ? buildInp({ ...defaultOptions, ...a.opts } as InpOptions) : null), [a]);
+  const builtB = useMemo(() => (b ? buildInp({ ...defaultOptions, ...b.opts } as InpOptions) : null), [b]);
+
+  const [overlayMetric, setOverlayMetric] = useState<"flooded" | "surcharged">("flooded");
+  const overlayDiff = overlayMetric === "flooded" ? nodeDiff.flooded : nodeDiff.surcharged;
+
+  const exportComparison = (format: "csv" | "json") => {
+    if (!a || !b) return;
+    const payload = buildExportPayload(a, b, nodeDiff);
+    const [content, mime, ext] =
+      format === "json"
+        ? [JSON.stringify(payload, null, 2), "application/json", "json"]
+        : [buildCsv(payload), "text/csv", "csv"];
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `compare_${a.label}_vs_${b.label}_${Date.now()}.${ext}`.replace(/\s+/g, "");
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+
   if (entries.length < 2) {
     return (
       <div className="flex h-full items-center justify-center rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
@@ -66,11 +126,36 @@ export function ComparePanel({ entries, thresholds, onReopen, hasStoredResult }:
   return (
     <div className="flex h-full flex-col gap-4 overflow-auto">
       <div className="rounded-md border border-border bg-card/60 p-4">
-        <h3 className="text-sm font-semibold">Compare two runs</h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Highlights the delta in key metrics and the set difference of flooded /
-          surcharged nodes between two runs from history.
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold">Compare two runs</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Highlights the delta in key metrics and the set difference of flooded /
+              surcharged nodes between two runs from history. Selection is remembered
+              across reloads.
+            </p>
+          </div>
+          <div className="flex flex-shrink-0 gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!a || !b}
+              onClick={() => exportComparison("csv")}
+              title="Download the current comparison as CSV"
+            >
+              Export CSV
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!a || !b}
+              onClick={() => exportComparison("json")}
+              title="Download the current comparison as JSON"
+            >
+              Export JSON
+            </Button>
+          </div>
+        </div>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <RunPicker label="Run A" value={aId} onChange={setAId} entries={entries} exclude={bId} />
           <RunPicker label="Run B" value={bId} onChange={setBId} entries={entries} exclude={aId} />
@@ -79,6 +164,16 @@ export function ComparePanel({ entries, thresholds, onReopen, hasStoredResult }:
 
       {a && b ? (
         <>
+          <DiffOverlay
+            metric={overlayMetric}
+            onMetricChange={setOverlayMetric}
+            builtA={builtA}
+            builtB={builtB}
+            a={a}
+            b={b}
+            diff={overlayDiff}
+          />
+
           <div className="overflow-auto rounded-md border border-border bg-card">
             <table className="w-full font-mono text-xs">
               <thead className="sticky top-0 bg-card">
@@ -394,3 +489,300 @@ function chipCls(tone: "ok" | "warn" | "bad" | "muted"): string {
         ? "border-primary/40 bg-primary/10 text-primary"
         : "border-border bg-muted/40 text-muted-foreground";
 }
+
+// Classification colors for the overlay + legend.
+// only-A = destructive red, only-B = accent/blue, both = primary purple, else muted.
+const CLS_COLORS = {
+  onlyA: { fill: "hsl(var(--destructive))", stroke: "hsl(var(--destructive))" },
+  onlyB: { fill: "hsl(var(--accent))", stroke: "hsl(var(--accent))" },
+  both: { fill: "hsl(var(--primary))", stroke: "hsl(var(--primary))" },
+  none: { fill: "hsl(var(--muted-foreground) / 0.35)", stroke: "hsl(var(--border))" },
+} as const;
+
+type Cls = keyof typeof CLS_COLORS;
+
+function DiffOverlay({
+  metric,
+  onMetricChange,
+  builtA,
+  builtB,
+  a,
+  b,
+  diff,
+}: {
+  metric: "flooded" | "surcharged";
+  onMetricChange: (m: "flooded" | "surcharged") => void;
+  builtA: BuildResult | null;
+  builtB: BuildResult | null;
+  a: RunHistoryEntry;
+  b: RunHistoryEntry;
+  diff: { onlyA: string[]; onlyB: string[]; both: string[] };
+}) {
+  const onlyA = useMemo(() => new Set(diff.onlyA), [diff]);
+  const onlyB = useMemo(() => new Set(diff.onlyB), [diff]);
+  const both = useMemo(() => new Set(diff.both), [diff]);
+
+  const classify = (nodeId: number): Cls => {
+    const s = String(nodeId);
+    if (both.has(s)) return "both";
+    if (onlyA.has(s)) return "onlyA";
+    if (onlyB.has(s)) return "onlyB";
+    return "none";
+  };
+
+  return (
+    <div className="rounded-md border border-border bg-card p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h4 className="text-sm font-semibold">Node overlay</h4>
+          <p className="text-[11px] text-muted-foreground">
+            Each run rendered on its own topology; nodes are colored by set membership so
+            only-A, only-B, and both are visible in a single view.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            metric:
+          </span>
+          {(["flooded", "surcharged"] as const).map((m) => (
+            <Button
+              key={m}
+              size="sm"
+              variant={metric === m ? "default" : "outline"}
+              className="h-7 px-2 text-[11px]"
+              onClick={() => onMetricChange(m)}
+            >
+              {m}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px]">
+        <LegendSwatch cls="onlyA" label={`only in A · ${diff.onlyA.length}`} />
+        <LegendSwatch cls="onlyB" label={`only in B · ${diff.onlyB.length}`} />
+        <LegendSwatch cls="both" label={`in both · ${diff.both.length}`} />
+        <LegendSwatch cls="none" label="unaffected" />
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <OverlayCanvas title={`Run A · ${a.label}`} built={builtA} classify={classify} />
+        <OverlayCanvas title={`Run B · ${b.label}`} built={builtB} classify={classify} />
+      </div>
+    </div>
+  );
+}
+
+function LegendSwatch({ cls, label }: { cls: Cls; label: string }) {
+  const c = CLS_COLORS[cls];
+  return (
+    <div className="flex items-center gap-1.5">
+      <span
+        className="inline-block h-3 w-3 rounded-full border"
+        style={{ background: c.fill, borderColor: c.stroke }}
+      />
+      <span className="font-mono uppercase tracking-wider text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
+function OverlayCanvas({
+  title,
+  built,
+  classify,
+}: {
+  title: string;
+  built: BuildResult | null;
+  classify: (n: number) => Cls;
+}) {
+  if (!built) {
+    return (
+      <div className="flex h-64 items-center justify-center rounded border border-dashed border-border text-xs text-muted-foreground">
+        {title} — no geometry
+      </div>
+    );
+  }
+  const coords = built.coords;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [, [x, y]] of coords) {
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  }
+  if (!isFinite(minX)) {
+    minX = 0; minY = 0; maxX = 1; maxY = 1;
+  }
+  const pad = Math.max((maxX - minX) * 0.05, (maxY - minY) * 0.05, 1);
+  minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+  const w = maxX - minX;
+  const h = maxY - minY;
+  // Flip Y so SVG matches HolyTreeCanvas orientation (y-up in data, y-down in svg).
+  const project = (x: number, y: number): [number, number] => [x - minX, maxY - y];
+
+  const nodeCount = built.tree.nodes.size;
+  const r = nodeCount > 2000 ? 0.6 : nodeCount > 500 ? 1.0 : 1.6;
+
+  // Draw affected nodes last so they sit on top.
+  const nodes: Array<{ id: number; cls: Cls; x: number; y: number }> = [];
+  for (const n of built.tree.nodes) {
+    const c = coords.get(n);
+    if (!c) continue;
+    const [px, py] = project(c[0], c[1]);
+    nodes.push({ id: n, cls: classify(n), x: px, y: py });
+  }
+  nodes.sort((a, b) => order(a.cls) - order(b.cls));
+
+  return (
+    <div>
+      <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+        {title} · {nodeCount} nodes
+      </div>
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        preserveAspectRatio="xMidYMid meet"
+        className="h-64 w-full rounded border border-border bg-background"
+      >
+        <g stroke="hsl(var(--border))" strokeWidth={Math.max(w, h) * 0.0008} opacity={0.6}>
+          {Array.from(built.tree.edges).map(([from, to], i) => {
+            const c1 = coords.get(from);
+            const c2 = coords.get(to);
+            if (!c1 || !c2) return null;
+            const [x1, y1] = project(c1[0], c1[1]);
+            const [x2, y2] = project(c2[0], c2[1]);
+            return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} />;
+          })}
+        </g>
+        <g>
+          {nodes.map((n) => {
+            const c = CLS_COLORS[n.cls];
+            const rr = n.cls === "none" ? r : r * 1.9;
+            return (
+              <circle
+                key={n.id}
+                cx={n.x}
+                cy={n.y}
+                r={rr}
+                fill={c.fill}
+                stroke={c.stroke}
+                strokeWidth={n.cls === "none" ? 0 : rr * 0.35}
+              />
+            );
+          })}
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+function order(cls: Cls): number {
+  return cls === "none" ? 0 : cls === "both" ? 1 : 2;
+}
+
+// ---------- Export helpers ----------
+
+interface ExportPayload {
+  generatedAt: string;
+  runA: RunSummary;
+  runB: RunSummary;
+  metrics: Array<{
+    metric: string;
+    runA: number | null | undefined;
+    runB: number | null | undefined;
+    delta: number | null;
+  }>;
+  nodeDiff: {
+    flooded: { onlyA: string[]; onlyB: string[]; both: string[] };
+    surcharged: { onlyA: string[]; onlyB: string[]; both: string[] };
+  };
+}
+
+interface RunSummary {
+  id: string;
+  label: string;
+  timestamp: string;
+  inputVersion: string;
+  engine: string;
+  nodeCount: number;
+  conduitCount: number;
+  durationSec: number;
+}
+
+function summarizeRun(e: RunHistoryEntry): RunSummary {
+  return {
+    id: e.id,
+    label: e.label,
+    timestamp: new Date(e.timestamp).toISOString(),
+    inputVersion: e.inputVersion,
+    engine: e.meta.engine,
+    nodeCount: e.meta.nodeCount,
+    conduitCount: e.meta.conduitCount,
+    durationSec: e.meta.durationMs / 1000,
+  };
+}
+
+function buildExportPayload(
+  a: RunHistoryEntry,
+  b: RunHistoryEntry,
+  nodeDiff: ExportPayload["nodeDiff"],
+): ExportPayload {
+  const delta = (av: number | null | undefined, bv: number | null | undefined) =>
+    av == null || bv == null ? null : bv - av;
+  return {
+    generatedAt: new Date().toISOString(),
+    runA: summarizeRun(a),
+    runB: summarizeRun(b),
+    metrics: [
+      { metric: "flow_continuity_pct", runA: a.metrics.flowContinuityPct, runB: b.metrics.flowContinuityPct, delta: delta(a.metrics.flowContinuityPct, b.metrics.flowContinuityPct) },
+      { metric: "runoff_continuity_pct", runA: a.metrics.runoffContinuityPct, runB: b.metrics.runoffContinuityPct, delta: delta(a.metrics.runoffContinuityPct, b.metrics.runoffContinuityPct) },
+      { metric: "flooded_nodes", runA: a.metrics.floodedNodes, runB: b.metrics.floodedNodes, delta: delta(a.metrics.floodedNodes, b.metrics.floodedNodes) },
+      { metric: "surcharged_nodes", runA: a.metrics.surchargedNodes, runB: b.metrics.surchargedNodes, delta: delta(a.metrics.surchargedNodes, b.metrics.surchargedNodes) },
+      { metric: "max_surcharge_hours", runA: a.metrics.maxSurchargeHours, runB: b.metrics.maxSurchargeHours, delta: delta(a.metrics.maxSurchargeHours, b.metrics.maxSurchargeHours) },
+      { metric: "analysis_errors", runA: a.metrics.analysisErrors, runB: b.metrics.analysisErrors, delta: delta(a.metrics.analysisErrors, b.metrics.analysisErrors) },
+      { metric: "node_count", runA: a.meta.nodeCount, runB: b.meta.nodeCount, delta: delta(a.meta.nodeCount, b.meta.nodeCount) },
+      { metric: "conduit_count", runA: a.meta.conduitCount, runB: b.meta.conduitCount, delta: delta(a.meta.conduitCount, b.meta.conduitCount) },
+      { metric: "runtime_sec", runA: a.meta.durationMs / 1000, runB: b.meta.durationMs / 1000, delta: delta(a.meta.durationMs / 1000, b.meta.durationMs / 1000) },
+    ],
+    nodeDiff,
+  };
+}
+
+function csvEscape(v: unknown): string {
+  if (v == null) return "";
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function buildCsv(p: ExportPayload): string {
+  const lines: string[] = [];
+  lines.push("# Collatz SWMM5 comparison export");
+  lines.push(`# generated_at,${csvEscape(p.generatedAt)}`);
+  lines.push("");
+  lines.push("section,field,run_a,run_b");
+  const runFields: Array<keyof RunSummary> = [
+    "id", "label", "timestamp", "inputVersion", "engine", "nodeCount", "conduitCount", "durationSec",
+  ];
+  for (const f of runFields) {
+    lines.push(`run_meta,${f},${csvEscape(p.runA[f])},${csvEscape(p.runB[f])}`);
+  }
+  lines.push("");
+  lines.push("metric,run_a,run_b,delta_b_minus_a");
+  for (const m of p.metrics) {
+    lines.push(`${csvEscape(m.metric)},${csvEscape(m.runA)},${csvEscape(m.runB)},${csvEscape(m.delta)}`);
+  }
+  lines.push("");
+  lines.push("node_diff_group,node_id");
+  const groups: Array<[string, string[]]> = [
+    ["flooded_only_a", p.nodeDiff.flooded.onlyA],
+    ["flooded_only_b", p.nodeDiff.flooded.onlyB],
+    ["flooded_both", p.nodeDiff.flooded.both],
+    ["surcharged_only_a", p.nodeDiff.surcharged.onlyA],
+    ["surcharged_only_b", p.nodeDiff.surcharged.onlyB],
+    ["surcharged_both", p.nodeDiff.surcharged.both],
+  ];
+  for (const [name, ids] of groups) {
+    for (const id of ids) lines.push(`${csvEscape(name)},${csvEscape(id)}`);
+  }
+  return lines.join("\n") + "\n";
+}
+
