@@ -15,7 +15,10 @@ export interface LinkSeries {
   from: number;
   to: number;
   flow: number[];
+  depth: number[];
+  velocity: number[];
 }
+
 
 export interface SystemSeries {
   totalInflow: number[];
@@ -182,7 +185,10 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
             from: e ? e[0] : -1,
             to: e ? e[1] : -1,
             flow: Array.from(parsed.linkFlow[i]),
+            depth: Array.from(parsed.linkDepth[i]),
+            velocity: Array.from(parsed.linkVelocity[i]),
           });
+
         }
         // system: 0 airTemp, 1 rainfall, 2 snowDepth, 3 infil, 4 runoff,
         // 5 dwflow, 6 gwflow, 7 iiflow, 8 extflow, 9 totalInflow,
@@ -303,7 +309,10 @@ function parseOutBufferToResult(
           from: e ? e[0] : -1,
           to: e ? e[1] : -1,
           flow: Array.from(parsed.linkFlow[i]),
+          depth: Array.from(parsed.linkDepth[i]),
+          velocity: Array.from(parsed.linkVelocity[i]),
         });
+
       }
       system = {
         rainfall: Array.from(parsed.sysVars[1]),

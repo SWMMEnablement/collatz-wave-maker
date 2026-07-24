@@ -19,8 +19,11 @@ export interface ParsedOut {
   nodeDepth: Float32Array[];
   nodeTotalInflow: Float32Array[];
   linkFlow: Float32Array[];
+  linkDepth: Float32Array[];
+  linkVelocity: Float32Array[];
   sysVars: Float32Array[]; // length 15, each of length nPeriods
 }
+
 
 const MAGIC = 516114522;
 
@@ -93,6 +96,14 @@ export function parseSwmmOut(buf: Uint8Array): ParsedOut | null {
     { length: Nlink },
     () => new Float32Array(nPeriods),
   );
+  const linkDepth: Float32Array[] = Array.from(
+    { length: Nlink },
+    () => new Float32Array(nPeriods),
+  );
+  const linkVelocity: Float32Array[] = Array.from(
+    { length: Nlink },
+    () => new Float32Array(nPeriods),
+  );
   const sysVars: Float32Array[] = Array.from(
     { length: nSysVars },
     () => new Float32Array(nPeriods),
@@ -113,6 +124,8 @@ export function parseSwmmOut(buf: Uint8Array): ParsedOut | null {
     for (let l = 0; l < Nlink; l++) {
       const lb = linksBase + l * nLinkVars * 4;
       linkFlow[l][p] = f32(dv, lb); // var 0 = flow
+      linkDepth[l][p] = f32(dv, lb + 4); // var 1 = depth
+      linkVelocity[l][p] = f32(dv, lb + 8); // var 2 = velocity
     }
     const sysBase = linksBase + 4 * Nlink * nLinkVars;
     for (let s = 0; s < nSysVars; s++) {
@@ -132,6 +145,9 @@ export function parseSwmmOut(buf: Uint8Array): ParsedOut | null {
     nodeDepth,
     nodeTotalInflow,
     linkFlow,
+    linkDepth,
+    linkVelocity,
     sysVars,
   };
 }
+

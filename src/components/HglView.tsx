@@ -75,10 +75,14 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
       const qAccum = up * opts.dwfBaseflow;
       let hgl: number;
       let surcharged = false;
+      let flooded = false;
       if (hasEngine) {
         const d = depthByNode.get(n) ?? 0;
         hgl = inv + d;
-        surcharged = d > opts.maxDepth - 1e-6 && n !== 1;
+        if (n !== 1) {
+          if (d >= opts.maxDepth * 1.02) flooded = true;
+          else if (d >= opts.maxDepth * 0.98) surcharged = true;
+        }
       } else {
         // Fallback conceptual HGL from cumulative DWF.
         const headProxy = Math.min(
@@ -97,8 +101,10 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
         q: qAccum,
         isOutfall: n === 1,
         surcharged,
+        flooded,
       };
     });
+
     rows.sort((a, b) => b.invert - a.invert || a.n - b.n);
     return rows;
   }, [tree, inverts, opts, hasEngine, depthByNode]);
@@ -239,7 +245,7 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
           />
         ))}
 
-        {/* Surcharge markers (HGL >= ground) */}
+        {/* Surcharge markers (amber) */}
         {hasEngine && data.filter((d) => d.surcharged).map((d) => {
           const i = data.indexOf(d);
           return (
@@ -248,14 +254,43 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
               cx={x(i).toFixed(2)}
               cy={y(d.hgl).toFixed(2)}
               r={3.5}
-              fill="oklch(0.72 0.22 25)"
-              stroke="oklch(0.95 0.1 20)"
+              fill="oklch(0.82 0.18 65)"
+              stroke="oklch(0.95 0.1 60)"
               strokeWidth="0.8"
             >
-              <title>node {d.n} surcharged: depth {(d.hgl - d.invert).toFixed(2)} ≥ {opts.maxDepth}</title>
+              <title>node {d.n} surcharged: depth {(d.hgl - d.invert).toFixed(2)} near {opts.maxDepth}</title>
             </circle>
           );
         })}
+
+        {/* Flooded markers (bright red, larger + pulse ring) */}
+        {hasEngine && data.filter((d) => d.flooded).map((d) => {
+          const i = data.indexOf(d);
+          return (
+            <g key={"fl" + d.n}>
+              <circle
+                cx={x(i).toFixed(2)}
+                cy={y(d.hgl).toFixed(2)}
+                r={7}
+                fill="none"
+                stroke="oklch(0.72 0.22 25)"
+                strokeWidth="1"
+                strokeOpacity="0.6"
+              />
+              <circle
+                cx={x(i).toFixed(2)}
+                cy={y(d.hgl).toFixed(2)}
+                r={4.5}
+                fill="oklch(0.72 0.22 25)"
+                stroke="oklch(0.98 0.05 20)"
+                strokeWidth="1"
+              >
+                <title>node {d.n} FLOODED: depth {(d.hgl - d.invert).toFixed(2)} ≥ {opts.maxDepth}</title>
+              </circle>
+            </g>
+          );
+        })}
+
 
         {/* Axis labels */}
         <text
@@ -288,8 +323,10 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
         <Legend swatch="oklch(0.6 0.03 60)" label="pipe crown" dashed />
         <Legend swatch="oklch(0.7 0.05 60)" label="invert" />
         <Legend swatch="oklch(0.78 0.2 230)" label={hasEngine ? "hgl (depth from engine)" : "hgl (∝ ΣDWF)"} />
-        {hasEngine && <Legend swatch="oklch(0.72 0.22 25)" label="surcharged" />}
+        {hasEngine && <Legend swatch="oklch(0.82 0.18 65)" label="surcharged" />}
+        {hasEngine && <Legend swatch="oklch(0.72 0.22 25)" label="flooded" />}
       </div>
+
 
       {hasEngine && (
         <div className="absolute inset-x-3 bottom-3 flex items-center gap-3 rounded-md border border-border bg-background/85 px-3 py-2 backdrop-blur">
@@ -334,9 +371,13 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
           <span className="font-mono text-[10px] text-primary">
             {(engineResult!.times[activeIdx] ?? 0).toFixed(0)} min
           </span>
-          <span className="font-mono text-[10px] text-muted-foreground">
+          <span className="font-mono text-[10px] text-accent">
             · {data.filter((d) => d.surcharged).length} surcharged
           </span>
+          <span className="font-mono text-[10px] text-destructive">
+            · {data.filter((d) => d.flooded).length} flooded
+          </span>
+
         </div>
       )}
 
@@ -348,7 +389,7 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
             n=<span className="text-primary">{d.n}</span> · invert{" "}
             {d.invert.toFixed(2)} · crown {d.crown.toFixed(2)} · hgl{" "}
             {d.hgl.toFixed(2)}
-            {d.surcharged ? " · SURCHARGED" : ""}
+            {d.flooded ? " · FLOODED" : d.surcharged ? " · SURCHARGED" : ""}
           </div>
         );
       })()}

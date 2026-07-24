@@ -12,6 +12,8 @@ import { DocsView } from "@/components/DocsView";
 import { RunHistoryPanel } from "@/components/RunHistoryPanel";
 import { BatchRunner } from "@/components/BatchRunner";
 import { ComparePanel } from "@/components/ComparePanel";
+import { SizingPanel } from "@/components/SizingPanel";
+
 import { buildInp, defaultOptions, type BuildResult, type InpOptions } from "@/lib/swmm/inp";
 import { validateInp } from "@/lib/swmm/validate";
 import { buildGeoJson } from "@/lib/swmm/geojson";
@@ -248,9 +250,11 @@ function Page() {
                 <TabsTrigger value="hgl">HGL <Badge tone={engineResult ? "ok" : "warn"}>{engineResult ? "ENGINE" : "GEOMETRY PREVIEW"}</Badge></TabsTrigger>
                 <TabsTrigger value="inp">INP text <Badge tone="ok">GENERATED</Badge></TabsTrigger>
                 <TabsTrigger value="engine">Engine <Badge tone={engineResult ? "ok" : "warn"}>{engineResult ? `SWMM5 · ${engineResult.engine.toUpperCase()}` : "WASM READY"}</Badge></TabsTrigger>
+                <TabsTrigger value="sizing">Sizing</TabsTrigger>
                 <TabsTrigger value="batch">Batch</TabsTrigger>
                 <TabsTrigger value="history">History {history.entries.length > 0 && <Badge tone="ok">{history.entries.length}</Badge>}</TabsTrigger>
                 <TabsTrigger value="compare">Compare</TabsTrigger>
+
                 <TabsTrigger value="docs">Docs</TabsTrigger>
               </TabsList>
               <TabsContent value="visual" className="mt-3">
@@ -300,7 +304,19 @@ function Page() {
                   />
                 </div>
               </TabsContent>
+              <TabsContent value="sizing" className="mt-3">
+                <div className="h-[75vh] min-h-[520px]">
+                  <SizingPanel
+                    opts={opts}
+                    onApplyDiameter={(d, progressive) =>
+                      setOpts((prev) => ({ ...prev, diameter: d, progressiveSizing: progressive }))
+                    }
+                    onResult={(r) => { setEngineResult(r); setTab("engine"); }}
+                  />
+                </div>
+              </TabsContent>
               <TabsContent value="batch" className="mt-3">
+
                 <div className="h-[75vh] min-h-[520px]">
                   <BatchRunner
                     baseOpts={opts}
