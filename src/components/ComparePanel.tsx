@@ -825,6 +825,8 @@ interface RunSummary {
   nodeCount: number;
   conduitCount: number;
   durationSec: number;
+  steps: number;
+  optsJson: string;
 }
 
 function summarizeRun(e: RunHistoryEntry): RunSummary {
@@ -837,8 +839,11 @@ function summarizeRun(e: RunHistoryEntry): RunSummary {
     nodeCount: e.meta.nodeCount,
     conduitCount: e.meta.conduitCount,
     durationSec: e.meta.durationMs / 1000,
+    steps: e.meta.steps,
+    optsJson: JSON.stringify(e.opts ?? {}),
   };
 }
+
 
 function buildExportPayload(
   a: RunHistoryEntry,
