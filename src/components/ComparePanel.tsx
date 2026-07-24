@@ -36,30 +36,51 @@ export function ComparePanel({ entries, thresholds, onReopen, hasStoredResult }:
   const [aId, setAId] = useState<string>("");
   const [bId, setBId] = useState<string>("");
   const [hydrated, setHydrated] = useState(false);
+  const [importedEntries, setImportedEntries] = useState<RunHistoryEntry[]>([]);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Hydrate persisted selection once, then reconcile against current entries.
+  // Hydrate persisted selection + imported entries once.
   useEffect(() => {
     const s = loadSelection();
     setAId(s.a);
     setBId(s.b);
+    try {
+      const raw = window.localStorage.getItem(IMPORTED_KEY);
+      if (raw) setImportedEntries(JSON.parse(raw));
+    } catch {
+      /* ignore */
+    }
     setHydrated(true);
   }, []);
 
+  const mergedEntries = useMemo(() => {
+    const seen = new Set<string>();
+    const out: RunHistoryEntry[] = [];
+    for (const e of [...importedEntries, ...entries]) {
+      if (seen.has(e.id)) continue;
+      seen.add(e.id);
+      out.push(e);
+    }
+    return out;
+  }, [importedEntries, entries]);
+
   useEffect(() => {
     if (!hydrated) return;
-    const has = (id: string) => !!id && entries.some((e) => e.id === id);
+    const has = (id: string) => !!id && mergedEntries.some((e) => e.id === id);
     setAId((prev) => {
       if (has(prev)) return prev;
-      return entries[0]?.id ?? "";
+      return mergedEntries[0]?.id ?? "";
     });
     setBId((prev) => {
-      if (has(prev) && prev !== (entries[0]?.id ?? "")) return prev;
-      const alt = entries.find((e) => e.id !== (aId || entries[0]?.id));
+      if (has(prev) && prev !== (mergedEntries[0]?.id ?? "")) return prev;
+      const alt = mergedEntries.find((e) => e.id !== (aId || mergedEntries[0]?.id));
       return alt?.id ?? "";
     });
     // aId intentionally omitted — we only want to auto-heal when entries change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, hydrated]);
+  }, [mergedEntries, hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -70,8 +91,45 @@ export function ComparePanel({ entries, thresholds, onReopen, hasStoredResult }:
     }
   }, [aId, bId, hydrated]);
 
-  const a = entries.find((e) => e.id === aId);
-  const b = entries.find((e) => e.id === bId);
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      window.localStorage.setItem(IMPORTED_KEY, JSON.stringify(importedEntries));
+    } catch {
+      /* ignore */
+    }
+  }, [importedEntries, hydrated]);
+
+  const a = mergedEntries.find((e) => e.id === aId);
+  const b = mergedEntries.find((e) => e.id === bId);
+
+  const handleImportFile = async (file: File) => {
+    setImportError(null);
+    setImportNotice(null);
+    try {
+      const text = await file.text();
+      const isJson = /\.json$/i.test(file.name) || text.trim().startsWith("{");
+      const payload = isJson ? parseImportJson(text) : parseImportCsv(text);
+      const [entryA, entryB] = payloadToEntries(payload);
+      setImportedEntries((prev) => {
+        const filtered = prev.filter((e) => e.id !== entryA.id && e.id !== entryB.id);
+        return [entryA, entryB, ...filtered].slice(0, 20);
+      });
+      setAId(entryA.id);
+      setBId(entryB.id);
+      setImportNotice(`Imported ${entryA.label} vs ${entryB.label}`);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Failed to import file");
+    }
+  };
+
+  const clearImported = () => {
+    setImportedEntries([]);
+    setImportNotice(null);
+    setImportError(null);
+  };
+
+
 
 
   const nodeDiff = useMemo(() => {
