@@ -7,13 +7,14 @@ import type { RptSummary } from "./rpt";
 import type { EngineProvenance } from "./provenance";
 
 export interface RunManifest {
-  schema_version: "1.0";
+  schema_version: "1.1";
   generator_version: string;
   generated_at: string;
+  configuration_sha256: string | null;
   generator: {
     seed_min: number;
     seed_max: number;
-    integer_mode: "Number (IEEE-754 float64)";
+    integer_mode: "BigInt-guarded, f64 node keys";
     iteration_cap: number;
     inflow_scope: InpOptions["inflowScope"];
     progressive_sizing: boolean;
@@ -38,11 +39,20 @@ export interface RunManifest {
     inp_sha256: string | null;
     inp_bytes: number;
   };
+  collatz: {
+    max_trajectory_value: string;
+    safe_integer_ok: boolean;
+    unsafe_truncated_seeds: number[];
+    iteration_capped_seeds: number[];
+    unresolved_seeds: number[];
+    cycles_detected: number;
+  };
   engine: {
     name: string;
     version: string;
     package: string;
     package_version: string;
+    package_source: string;
     wrapper_commit: string;
     wasm_sha256: string | null;
     wasm_bytes: number | null;
@@ -58,6 +68,8 @@ export interface RunManifest {
     surcharged_node_ids: string[];
     max_surcharge_hours: number | null;
     analysis_errors: string[];
+    analysis_warnings: string[];
+    status: "VALID" | "COMPLETED_WITH_WARNINGS" | "NUMERICALLY_QUESTIONABLE" | "FAILED";
   };
 }
 
