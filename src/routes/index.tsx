@@ -36,6 +36,8 @@ export const Route = createFileRoute("/")({
         property: "og:description",
         content: "Holy Tree from Collatz sequences, rendered as a SWMM5 stormwater network.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: PageWrapper,
