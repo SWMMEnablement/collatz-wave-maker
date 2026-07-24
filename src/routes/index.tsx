@@ -237,6 +237,7 @@ function Page() {
                 <TabsTrigger value="engine">Engine <Badge tone={engineResult ? "ok" : "warn"}>{engineResult ? `SWMM5 · ${engineResult.engine.toUpperCase()}` : "WASM READY"}</Badge></TabsTrigger>
                 <TabsTrigger value="batch">Batch</TabsTrigger>
                 <TabsTrigger value="history">History {history.entries.length > 0 && <Badge tone="ok">{history.entries.length}</Badge>}</TabsTrigger>
+                <TabsTrigger value="compare">Compare</TabsTrigger>
                 <TabsTrigger value="docs">Docs</TabsTrigger>
               </TabsList>
               <TabsContent value="visual" className="mt-3">
