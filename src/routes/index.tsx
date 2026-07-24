@@ -158,13 +158,19 @@ function Page() {
             <span className="font-mono uppercase tracking-wider text-accent">Model status:</span>{" "}
             the <code className="font-mono">.inp</code>, GeoJSON, and geometric HGL preview
             are generated deterministically from the topology. The{" "}
-            <strong className="text-primary">EPA SWMM 5.2.x engine ships as WASM</strong>{" "}
+            <strong className="text-primary">EPA SWMM 5.2.4 engine ships as WASM</strong>{" "}
             (<code className="font-mono">@fileops/swmm-wasm</code>) under{" "}
             <code className="font-mono text-primary">/wasm/swmm5.js</code> and runs in a Web
             Worker — the Engine tab reports continuity error, flooded nodes, and max
-            surcharge from the actual <code className="font-mono">.rpt</code>. Progressive
-            pipe sizing uses <code className="font-mono">√upstream</code> nodes and is a
-            conceptual demo, not hydraulic design.
+            surcharge from the actual <code className="font-mono">.rpt</code>, and exposes
+            the WASM SHA-256 plus a downloadable run manifest.
+          </p>
+          <p className="mt-2 max-w-2xl text-xs text-accent/90">
+            <span className="font-mono uppercase tracking-wider">Synthetic-model notice:</span>{" "}
+            this is a mathematical network for education, computational art, and
+            solver testing. Coordinates, elevations, lengths, inflows, rainfall,
+            catchments, and conduit dimensions are generated assumptions — not
+            infrastructure design.
           </p>
           <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
             The Collatz conjecture (3n+1 problem) is an unsolved puzzle: for any
@@ -226,7 +232,12 @@ function Page() {
               {opts.subcatchments && (
                 <div>subs @ {opts.subcatchmentScope}: <span className="text-primary">{built.subcatchmentCount}</span> · {built.effectiveSubArea.toFixed(3)} {opts.flowUnits === "CFS" ? "ac" : "ha"} ea</div>
               )}
-              <div className="pt-1">engine: <span className="text-primary">EPA SWMM 5.2 · WASM</span></div>
+              <div className="pt-1">engine: <span className="text-primary">EPA SWMM 5.2.4 · WASM</span></div>
+              <div>inp size: <span className="text-primary">{(new Blob([built.inp]).size / 1024).toFixed(1)} KiB</span></div>
+              <div>integer mode: <span className="text-primary">Number (f64)</span> · cap 100k/seed</div>
+              {opts.maxSeed >= 2000 && (
+                <div className="text-accent">large-model warning: {opts.maxSeed} seeds may slow the browser</div>
+              )}
             </div>
           </aside>
 
