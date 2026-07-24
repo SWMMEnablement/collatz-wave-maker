@@ -365,6 +365,9 @@ export function EngineRunner({
             <Button variant="outline" size="sm" onClick={downloadSummary}>
               summary.json
             </Button>
+            <Button variant="outline" size="sm" onClick={downloadManifest} title="Deterministic run manifest with engine + INP hashes">
+              manifest.json
+            </Button>
             {selectedNodes && selectedNodes.size > 0 && (
               <span className="rounded border border-primary/40 bg-primary/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-primary">
                 filtered: {selectedNodes.size} node{selectedNodes.size === 1 ? "" : "s"} selected on diagram
@@ -404,6 +407,21 @@ export function EngineRunner({
           />
         </div>
       )}
+
+      {provenance && (
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-md border border-border bg-card/60 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground md:grid-cols-4">
+          <ProvCell label="Engine" value={`${provenance.engineName} ${provenance.engineVersion}`} />
+          <ProvCell label="Package" value={`${provenance.packageName} · ${provenance.packageVersion}`} />
+          <ProvCell label="WASM asset" value={`${formatBytes(provenance.assetBytes)} · ${provenance.assetPath}`} />
+          <ProvCell label="WASM SHA-256" value={shortHash(provenance.assetSha256, 16)} title={provenance.assetSha256 ?? undefined} />
+          <ProvCell label="Wrapper" value={provenance.wrapperCommit} />
+          <ProvCell label="Integer mode" value="Number (f64)" />
+          <ProvCell label="Iteration cap" value="100 000 / seed" />
+          <ProvCell label="Worker" value="cancelable · progress %" />
+        </div>
+      )}
+
+
 
 
 
