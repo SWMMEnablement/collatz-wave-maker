@@ -19,8 +19,11 @@ export interface ParsedOut {
   nodeDepth: Float32Array[];
   nodeTotalInflow: Float32Array[];
   linkFlow: Float32Array[];
+  linkDepth: Float32Array[];
+  linkVelocity: Float32Array[];
   sysVars: Float32Array[]; // length 15, each of length nPeriods
 }
+
 
 const MAGIC = 516114522;
 
