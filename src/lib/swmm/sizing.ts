@@ -251,6 +251,10 @@ export interface ModeRunSummary {
   built: BuildResult;
   result: EngineResult;
   metrics: RptSummary;
+  engineExitCode: number | null;
+  analysisErrors: string[];
+  analysisWarnings: string[];
+  engineLogTail: string;
 }
 
 async function runOne(
@@ -278,17 +282,51 @@ async function runOne(
     built,
     result,
     metrics,
+    engineExitCode: result.exitCode,
+    analysisErrors: metrics.analysisErrors,
+    analysisWarnings: metrics.analysisWarnings,
+    engineLogTail: (result.log ?? "").split("\n").slice(-20).join("\n"),
   };
+}
+
+export interface CompareStreamCallbacks {
+  onProgress?: (label: "uniform" | "progressive", enginePct?: number) => void;
+  /** Fires as soon as each mode's row is computed — enables live streaming. */
+  onModeDone?: (mode: ModeRunSummary) => void;
 }
 
 export async function compareDiameterModes(
   baseOpts: InpOptions,
-  onProgress?: (label: string, enginePct?: number) => void,
+  onProgressOrCb?:
+    | CompareStreamCallbacks
+    | ((label: "uniform" | "progressive", enginePct?: number) => void),
   signal?: AbortSignal,
+  /** Skip a mode already present in a saved manifest (resume). */
+  skipModes: Array<"uniform" | "progressive"> = [],
+  prior?: { uniform?: ModeRunSummary; progressive?: ModeRunSummary },
 ): Promise<{ uniform: ModeRunSummary; progressive: ModeRunSummary }> {
-  onProgress?.("uniform", 0);
-  const uniform = await runOne({ ...baseOpts, progressiveSizing: false }, "uniform", signal, (p) => onProgress?.("uniform", p));
-  onProgress?.("progressive", 0);
-  const progressive = await runOne({ ...baseOpts, progressiveSizing: true }, "progressive", signal, (p) => onProgress?.("progressive", p));
+  const cb: CompareStreamCallbacks =
+    typeof onProgressOrCb === "function" ? { onProgress: onProgressOrCb } : (onProgressOrCb ?? {});
+
+  let uniform: ModeRunSummary;
+  if (skipModes.includes("uniform") && prior?.uniform) {
+    uniform = prior.uniform;
+    cb.onModeDone?.(uniform);
+  } else {
+    cb.onProgress?.("uniform", 0);
+    uniform = await runOne({ ...baseOpts, progressiveSizing: false }, "uniform", signal, (p) => cb.onProgress?.("uniform", p));
+    cb.onModeDone?.(uniform);
+  }
+
+  let progressive: ModeRunSummary;
+  if (skipModes.includes("progressive") && prior?.progressive) {
+    progressive = prior.progressive;
+    cb.onModeDone?.(progressive);
+  } else {
+    cb.onProgress?.("progressive", 0);
+    progressive = await runOne({ ...baseOpts, progressiveSizing: true }, "progressive", signal, (p) => cb.onProgress?.("progressive", p));
+    cb.onModeDone?.(progressive);
+  }
+
   return { uniform, progressive };
 }
