@@ -126,11 +126,36 @@ export function ComparePanel({ entries, thresholds, onReopen, hasStoredResult }:
   return (
     <div className="flex h-full flex-col gap-4 overflow-auto">
       <div className="rounded-md border border-border bg-card/60 p-4">
-        <h3 className="text-sm font-semibold">Compare two runs</h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Highlights the delta in key metrics and the set difference of flooded /
-          surcharged nodes between two runs from history.
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold">Compare two runs</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Highlights the delta in key metrics and the set difference of flooded /
+              surcharged nodes between two runs from history. Selection is remembered
+              across reloads.
+            </p>
+          </div>
+          <div className="flex flex-shrink-0 gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!a || !b}
+              onClick={() => exportComparison("csv")}
+              title="Download the current comparison as CSV"
+            >
+              Export CSV
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!a || !b}
+              onClick={() => exportComparison("json")}
+              title="Download the current comparison as JSON"
+            >
+              Export JSON
+            </Button>
+          </div>
+        </div>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <RunPicker label="Run A" value={aId} onChange={setAId} entries={entries} exclude={bId} />
           <RunPicker label="Run B" value={bId} onChange={setBId} entries={entries} exclude={aId} />
@@ -139,6 +164,16 @@ export function ComparePanel({ entries, thresholds, onReopen, hasStoredResult }:
 
       {a && b ? (
         <>
+          <DiffOverlay
+            metric={overlayMetric}
+            onMetricChange={setOverlayMetric}
+            builtA={builtA}
+            builtB={builtB}
+            a={a}
+            b={b}
+            diff={overlayDiff}
+          />
+
           <div className="overflow-auto rounded-md border border-border bg-card">
             <table className="w-full font-mono text-xs">
               <thead className="sticky top-0 bg-card">
