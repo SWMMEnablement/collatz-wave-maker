@@ -21,7 +21,7 @@ interface BatchRow {
   status: RowStatus;
   metrics?: RptSummary;
   durationMs?: number;
-  engine?: "wasm" | "stub";
+  engine?: "wasm";
   nodeCount?: number;
   conduitCount?: number;
   historyId?: string;

@@ -1037,7 +1037,7 @@ function payloadToEntries(p: ExportPayload): [RunHistoryEntry, RunHistoryEntry] 
     let opts: Partial<InpOptions> = {};
     try { opts = JSON.parse(summary.optsJson || "{}"); } catch { /* ignore */ }
     const stamp = Date.parse(summary.timestamp);
-    const engine: "wasm" | "stub" = summary.engine === "stub" ? "stub" : "wasm";
+    const engine: "wasm" = "wasm";
     return {
       id: `imported_${summary.id}`,
       timestamp: Number.isFinite(stamp) ? stamp : Date.now(),

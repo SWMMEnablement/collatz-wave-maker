@@ -1,6 +1,5 @@
 // SWMM5 engine runner.
-// Loads the real Emscripten-compiled swmm5 from /wasm/swmm5.js + /wasm/swmm5.wasm.
-// Falls back to a synthetic stub only if the wasm fails to load.
+// Loads the EPA SWMM 5.2.x Emscripten build from /wasm/swmm5.js.
 
 import type { BuildResult } from "./inp";
 import { parseSwmmOut } from "./outfile";
@@ -35,7 +34,7 @@ export interface EngineResult {
   series: NodeSeries[];
   links: LinkSeries[];
   system: SystemSeries;
-  engine: "wasm" | "stub";
+  engine: "wasm";
   log: string;
   durationMs: number;
 }
@@ -238,141 +237,12 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
   }
 }
 
-function runStub(built: BuildResult, inp: string): EngineResult {
-  const t0 = performance.now();
-  const tree = built.tree;
-
-  // upstream node count per node (for cumulative DWF)
-  const upstream = new Map<number, number>();
-  const children = new Map<number, number[]>();
-  for (const [from, to] of tree.edges) {
-    if (!children.has(to)) children.set(to, []);
-    children.get(to)!.push(from);
-  }
-  const countUp = (n: number): number => {
-    if (upstream.has(n)) return upstream.get(n)!;
-    let c = 1;
-    for (const ch of children.get(n) ?? []) c += countUp(ch);
-    upstream.set(n, c);
-    return c;
-  };
-  for (const n of tree.nodes) countUp(n);
-
-  // Use a reporting step of 5 min; derive period count from endTimeSec when present.
-  const endSec = built.endTimeSec || 21600;
-  const stepSec = 300;
-  const N = Math.max(2, Math.floor(endSec / stepSec) + 1);
-  const peakMin = endSec / 60 / 3; // peak ~1/3 into sim
-  const times: number[] = [];
-  const wave: number[] = [];
-  for (let i = 0; i < N; i++) {
-    const m = i * (stepSec / 60);
-    times.push(m);
-    const x = (m - peakMin) / Math.max(30, peakMin / 2);
-    wave.push(Math.exp(-x * x * 0.6));
-  }
-
-  const baseflow = 0.1;
-  const series: NodeSeries[] = [];
-  const totalUp = upstream.get(1) ?? 1;
-  const inflowByNode = new Map<number, number[]>();
-  for (const n of tree.nodes) {
-    const up = upstream.get(n) ?? 1;
-    const peakQ = baseflow * up;
-    const inflow = wave.map((w) => +(peakQ * (0.3 + 0.7 * w)).toFixed(4));
-    const cap = built.inverts.get(n) !== undefined ? 10 : 10;
-    const depth = inflow.map((q) =>
-      +Math.min(cap, Math.log10(1 + q) * 1.5).toFixed(4),
-    );
-    series.push({ node: n, depth, inflow });
-    inflowByNode.set(n, inflow);
-  }
-
-  // synthesize link flows: flow in conduit ≈ from-node inflow
-  const links: LinkSeries[] = [];
-  let cid = 0;
-  for (const [from, to] of tree.edges) {
-    cid++;
-    const flow = inflowByNode.get(from) ?? wave.map(() => 0);
-    links.push({ id: "C" + cid, from, to, flow: flow.slice() });
-  }
-
-  const peakDepthByNode = series
-    .map((s) => ({ n: s.node, d: Math.max(...s.depth), q: Math.max(...s.inflow) }))
-    .sort((a, b) => b.d - a.d);
-
-  const lines: string[] = [];
-  lines.push("  EPA STORM WATER MANAGEMENT MODEL - VERSION 5 (stub engine)");
-  lines.push("  ----------------------------------------------------------");
-  lines.push("");
-  lines.push("  *********");
-  lines.push("  Run Setup");
-  lines.push("  *********");
-  lines.push(`  Number of subcatchments .... 0`);
-  lines.push(`  Number of nodes ............ ${built.nodeCount}`);
-  lines.push(`  Number of links ............ ${built.conduitCount}`);
-  lines.push(`  Flow units ................. user-set`);
-  lines.push("");
-  lines.push("  *****************");
-  lines.push("  Node Depth Summary");
-  lines.push("  *****************");
-  lines.push("  Node            Avg Depth   Max Depth   Max Inflow");
-  lines.push("  --------------------------------------------------");
-  for (const r of peakDepthByNode.slice(0, 50)) {
-    lines.push(
-      `  ${String(r.n).padEnd(15)} ${(r.d * 0.5).toFixed(3).padStart(9)} ${r.d
-        .toFixed(3)
-        .padStart(11)} ${r.q.toFixed(3).padStart(12)}`,
-    );
-  }
-  if (peakDepthByNode.length > 50) {
-    lines.push(`  ... (${peakDepthByNode.length - 50} more nodes omitted)`);
-  }
-  lines.push("");
-  lines.push("  Analysis ended at: " + new Date().toISOString());
-  lines.push(`  Total elapsed time: ${(performance.now() - t0).toFixed(1)} ms (stub)`);
-  lines.push("");
-  lines.push("  NOTE: real swmm5.wasm not found at /wasm/swmm5.js + /wasm/swmm5.wasm");
-  lines.push("        drop in an Emscripten build (MODULARIZE=1 EXPORT_NAME=createSwmmModule)");
-  lines.push("        exporting swmm_run(inp, rpt, out) to switch automatically.");
-  lines.push(`  Used ${tree.nodes.size} nodes, peak at root accumulates ${totalUp} contributors.`);
-
-  // synthesize system series
-  const Nt = times.length;
-  const sumInflow = new Array(Nt).fill(0);
-  for (const s of series) for (let i = 0; i < Nt; i++) sumInflow[i] += s.inflow[i] ?? 0;
-  const rootLink = links.find((l) => l.to === 1);
-  const outflow = rootLink ? rootLink.flow.slice() : new Array(Nt).fill(0);
-  const storage = sumInflow.map((q, i) => Math.max(0, q - (outflow[i] ?? 0)));
-  const system: SystemSeries = {
-    totalInflow: sumInflow,
-    flooding: new Array(Nt).fill(0),
-    outflow,
-    storage,
-    runoff: new Array(Nt).fill(0),
-    dwflow: sumInflow.map((q) => +(q * 0.1).toFixed(4)),
-    rainfall: new Array(Nt).fill(0),
-  };
-
-  return {
-    rpt: lines.join("\n"),
-    out: null,
-    times,
-    series,
-    links,
-    system,
-    engine: "stub",
-    log: `stub run completed in ${(performance.now() - t0).toFixed(1)}ms`,
-    durationMs: performance.now() - t0,
-  };
-}
-
 export async function runEngine(built: BuildResult): Promise<EngineResult> {
   const real = await runWasm(built);
   if (real && real.engine === "wasm" && real.rpt) {
     return real;
   }
-  return runStub(built, built.inp);
+  throw new Error(real?.log || "EPA SWMM5 WASM engine did not produce a report.");
 }
 
 // -----------------------------------------------------------------------------
@@ -469,7 +339,7 @@ export function startEngine(built: BuildResult, cb: EngineRunCallbacks = {}): En
     try {
       worker = new Worker(new URL("./engine.worker.ts", import.meta.url));
     } catch (e) {
-      // Worker unsupported → fallback on main thread.
+      // Worker unsupported → run on the main thread.
       runEngine(built).then(resolve, reject);
       return;
     }
@@ -491,12 +361,12 @@ export function startEngine(built: BuildResult, cb: EngineRunCallbacks = {}): En
       } else if (msg.type === "no-wasm") {
         worker?.terminate();
         worker = null;
-        resolve(runStub(built, built.inp));
+        reject(new Error("EPA SWMM5 WASM asset was not found at /wasm/swmm5.js."));
       } else if (msg.type === "error") {
         logLines.push("worker error: " + msg.message);
         worker?.terminate();
         worker = null;
-        resolve(runStub(built, built.inp));
+        reject(new Error("EPA SWMM5 WASM worker failed: " + msg.message));
       } else if (msg.type === "done") {
         logLines.push(`swmm_run returned ${msg.rc}`);
         const result = parseOutBufferToResult(built, msg.rpt, msg.out, msg.durationMs || (performance.now() - t0), logLines);
@@ -510,7 +380,7 @@ export function startEngine(built: BuildResult, cb: EngineRunCallbacks = {}): En
       logLines.push("worker onerror: " + ev.message);
       worker?.terminate();
       worker = null;
-      resolve(runStub(built, built.inp));
+      reject(new Error("EPA SWMM5 WASM worker failed: " + ev.message));
     };
     worker.postMessage({ inp: built.inp });
   });

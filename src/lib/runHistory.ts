@@ -15,7 +15,7 @@ export interface RunHistoryEntry {
   inputVersion: string; // short signature of the inputs that produced this run
   opts: Partial<InpOptions>;
   meta: {
-    engine: "wasm" | "stub";
+    engine: "wasm";
     durationMs: number;
     nodeCount: number;
     conduitCount: number;
