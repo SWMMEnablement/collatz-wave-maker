@@ -573,3 +573,12 @@ function MetricCard({ label, value, tone }: { label: string; value: string; tone
     </div>
   );
 }
+
+function ProvCell({ label, value, title }: { label: string; value: string; title?: string }) {
+  return (
+    <div className="flex min-w-0 flex-col" title={title}>
+      <span className="text-[9px] text-muted-foreground/70">{label}</span>
+      <span className="truncate text-foreground/90 normal-case">{value}</span>
+    </div>
+  );
+}
