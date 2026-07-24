@@ -245,7 +245,7 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
           />
         ))}
 
-        {/* Surcharge markers (HGL >= ground) */}
+        {/* Surcharge markers (amber) */}
         {hasEngine && data.filter((d) => d.surcharged).map((d) => {
           const i = data.indexOf(d);
           return (
@@ -254,14 +254,43 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
               cx={x(i).toFixed(2)}
               cy={y(d.hgl).toFixed(2)}
               r={3.5}
-              fill="oklch(0.72 0.22 25)"
-              stroke="oklch(0.95 0.1 20)"
+              fill="oklch(0.82 0.18 65)"
+              stroke="oklch(0.95 0.1 60)"
               strokeWidth="0.8"
             >
-              <title>node {d.n} surcharged: depth {(d.hgl - d.invert).toFixed(2)} ≥ {opts.maxDepth}</title>
+              <title>node {d.n} surcharged: depth {(d.hgl - d.invert).toFixed(2)} near {opts.maxDepth}</title>
             </circle>
           );
         })}
+
+        {/* Flooded markers (bright red, larger + pulse ring) */}
+        {hasEngine && data.filter((d) => d.flooded).map((d) => {
+          const i = data.indexOf(d);
+          return (
+            <g key={"fl" + d.n}>
+              <circle
+                cx={x(i).toFixed(2)}
+                cy={y(d.hgl).toFixed(2)}
+                r={7}
+                fill="none"
+                stroke="oklch(0.72 0.22 25)"
+                strokeWidth="1"
+                strokeOpacity="0.6"
+              />
+              <circle
+                cx={x(i).toFixed(2)}
+                cy={y(d.hgl).toFixed(2)}
+                r={4.5}
+                fill="oklch(0.72 0.22 25)"
+                stroke="oklch(0.98 0.05 20)"
+                strokeWidth="1"
+              >
+                <title>node {d.n} FLOODED: depth {(d.hgl - d.invert).toFixed(2)} ≥ {opts.maxDepth}</title>
+              </circle>
+            </g>
+          );
+        })}
+
 
         {/* Axis labels */}
         <text
