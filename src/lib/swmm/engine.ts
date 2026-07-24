@@ -274,6 +274,7 @@ function parseOutBufferToResult(
   outBuf: ArrayBuffer | null,
   durationMs: number,
   logLines: string[],
+  exitCode: number | null,
 ): EngineResult {
   const times: number[] = [];
   const series: NodeSeries[] = [];
