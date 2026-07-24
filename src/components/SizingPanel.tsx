@@ -650,13 +650,22 @@ function AttemptRow({ a, chosen }: { a: SizingAttempt; chosen: boolean }) {
     : a.passed
       ? "text-foreground"
       : "text-muted-foreground";
+  const errCount = a.analysisErrors?.length ?? 0;
+  const warnCount = a.analysisWarnings?.length ?? 0;
+  const tooltip = [
+    a.engineFailReason ? `engine: ${a.engineFailReason}` : null,
+    errCount ? `errors:\n${a.analysisErrors!.slice(0, 5).join("\n")}` : null,
+    warnCount ? `warnings:\n${a.analysisWarnings!.slice(0, 5).join("\n")}` : null,
+    a.engineLogTail ? `log:\n${a.engineLogTail}` : null,
+  ].filter(Boolean).join("\n\n");
   return (
-    <tr className={`border-t border-border ${cls}`}>
+    <tr className={`border-t border-border ${cls}`} title={tooltip || undefined}>
       <td className="px-2 py-1">{a.diameter}</td>
       <td className="px-2 py-1">{a.flooded}</td>
       <td className="px-2 py-1">{a.maxDepthRatio.toFixed(2)}</td>
       <td className="px-2 py-1">{a.maxVelocity.toFixed(2)}</td>
       <td className="px-2 py-1">{a.continuityPct != null ? a.continuityPct.toFixed(3) : "—"}</td>
+      <td className="px-2 py-1">{a.engineExitCode ?? "—"}</td>
       <td className="px-2 py-1">{a.runtimeMs.toFixed(0)}</td>
       <td className="px-2 py-1">
         {a.passed ? (
@@ -664,7 +673,14 @@ function AttemptRow({ a, chosen }: { a: SizingAttempt; chosen: boolean }) {
             {chosen ? "chosen" : "pass"}
           </span>
         ) : (
-          <span className="text-accent">{a.reason}</span>
+          <span className="text-accent">
+            {a.reason}
+            {(errCount || warnCount) ? (
+              <span className="ml-1 text-muted-foreground">
+                {errCount ? ` · ${errCount} err` : ""}{warnCount ? ` · ${warnCount} warn` : ""}
+              </span>
+            ) : null}
+          </span>
         )}
       </td>
     </tr>
