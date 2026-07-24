@@ -173,12 +173,32 @@ export function ComparePanel({ entries, thresholds, onReopen, hasStoredResult }:
   };
 
 
-  if (entries.length < 2) {
+  if (mergedEntries.length < 2) {
     return (
-      <div className="flex h-full items-center justify-center rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-        Need at least two runs in history to compare. Run more simulations from the
-        <span className="mx-1 font-mono text-primary">Engine</span> or
-        <span className="mx-1 font-mono text-primary">Batch</span> tab.
+      <div className="flex h-full flex-col items-center justify-center gap-3 rounded-md border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+        <p>
+          Need at least two runs to compare. Run more simulations from the
+          <span className="mx-1 font-mono text-primary">Engine</span> or
+          <span className="mx-1 font-mono text-primary">Batch</span> tab, or import a previously
+          exported comparison.
+        </p>
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,.csv,application/json,text/csv"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleImportFile(f);
+              e.target.value = "";
+            }}
+          />
+          <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
+            Import comparison…
+          </Button>
+        </div>
+        {importError && <p className="text-xs text-destructive">{importError}</p>}
       </div>
     );
   }
@@ -191,11 +211,40 @@ export function ComparePanel({ entries, thresholds, onReopen, hasStoredResult }:
             <h3 className="text-sm font-semibold">Compare two runs</h3>
             <p className="mt-1 text-xs text-muted-foreground">
               Highlights the delta in key metrics and the set difference of flooded /
-              surcharged nodes between two runs from history. Selection is remembered
-              across reloads.
+              surcharged nodes between two runs. Selection is remembered across reloads;
+              imported runs are tagged and stored locally.
             </p>
           </div>
-          <div className="flex flex-shrink-0 gap-2">
+          <div className="flex flex-shrink-0 flex-wrap justify-end gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,.csv,application/json,text/csv"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleImportFile(f);
+                e.target.value = "";
+              }}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              title="Load a previously exported comparison (JSON or CSV)"
+            >
+              Import…
+            </Button>
+            {importedEntries.length > 0 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={clearImported}
+                title="Remove imported runs from the picker"
+              >
+                Clear imports
+              </Button>
+            )}
             <Button
               size="sm"
               variant="outline"
@@ -216,11 +265,21 @@ export function ComparePanel({ entries, thresholds, onReopen, hasStoredResult }:
             </Button>
           </div>
         </div>
+        {(importError || importNotice) && (
+          <p
+            className={`mt-2 text-xs ${
+              importError ? "text-destructive" : "text-muted-foreground"
+            }`}
+          >
+            {importError ?? importNotice}
+          </p>
+        )}
         <div className="mt-3 grid gap-3 md:grid-cols-2">
-          <RunPicker label="Run A" value={aId} onChange={setAId} entries={entries} exclude={bId} />
-          <RunPicker label="Run B" value={bId} onChange={setBId} entries={entries} exclude={aId} />
+          <RunPicker label="Run A" value={aId} onChange={setAId} entries={mergedEntries} exclude={bId} />
+          <RunPicker label="Run B" value={bId} onChange={setBId} entries={mergedEntries} exclude={aId} />
         </div>
       </div>
+
 
       {a && b ? (
         <>
