@@ -389,7 +389,7 @@ export function HglView({ tree, inverts, opts, engineResult }: Props) {
             n=<span className="text-primary">{d.n}</span> · invert{" "}
             {d.invert.toFixed(2)} · crown {d.crown.toFixed(2)} · hgl{" "}
             {d.hgl.toFixed(2)}
-            {d.surcharged ? " · SURCHARGED" : ""}
+            {d.flooded ? " · FLOODED" : d.surcharged ? " · SURCHARGED" : ""}
           </div>
         );
       })()}
