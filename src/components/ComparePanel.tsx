@@ -7,6 +7,7 @@ import {
   type Thresholds,
 } from "@/lib/thresholds";
 import type { RunHistoryEntry } from "@/lib/runHistory";
+import { buildInp, defaultOptions, type BuildResult, type InpOptions } from "@/lib/swmm/inp";
 
 interface Props {
   entries: RunHistoryEntry[];
@@ -15,25 +16,61 @@ interface Props {
   hasStoredResult: (id: string) => boolean;
 }
 
+const SELECTION_KEY = "collatz-swmm.compare.selection.v1";
+
+function loadSelection(): { a: string; b: string } {
+  if (typeof window === "undefined") return { a: "", b: "" };
+  try {
+    const raw = window.localStorage.getItem(SELECTION_KEY);
+    if (!raw) return { a: "", b: "" };
+    const p = JSON.parse(raw);
+    return { a: typeof p?.a === "string" ? p.a : "", b: typeof p?.b === "string" ? p.b : "" };
+  } catch {
+    return { a: "", b: "" };
+  }
+}
+
 export function ComparePanel({ entries, thresholds, onReopen, hasStoredResult }: Props) {
   const [aId, setAId] = useState<string>("");
   const [bId, setBId] = useState<string>("");
+  const [hydrated, setHydrated] = useState(false);
+
+  // Hydrate persisted selection once, then reconcile against current entries.
+  useEffect(() => {
+    const s = loadSelection();
+    setAId(s.a);
+    setBId(s.b);
+    setHydrated(true);
+  }, []);
 
   useEffect(() => {
-    if (entries.length >= 2) {
-      setAId((prev) => (prev && entries.some((e) => e.id === prev) ? prev : entries[0].id));
-      setBId((prev) => (prev && entries.some((e) => e.id === prev) ? prev : entries[1].id));
-    } else if (entries.length === 1) {
-      setAId(entries[0].id);
-      setBId("");
-    } else {
-      setAId("");
-      setBId("");
+    if (!hydrated) return;
+    const has = (id: string) => !!id && entries.some((e) => e.id === id);
+    setAId((prev) => {
+      if (has(prev)) return prev;
+      return entries[0]?.id ?? "";
+    });
+    setBId((prev) => {
+      if (has(prev) && prev !== (entries[0]?.id ?? "")) return prev;
+      const alt = entries.find((e) => e.id !== (aId || entries[0]?.id));
+      return alt?.id ?? "";
+    });
+    // aId intentionally omitted — we only want to auto-heal when entries change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      window.localStorage.setItem(SELECTION_KEY, JSON.stringify({ a: aId, b: bId }));
+    } catch {
+      /* ignore quota */
     }
-  }, [entries]);
+  }, [aId, bId, hydrated]);
 
   const a = entries.find((e) => e.id === aId);
   const b = entries.find((e) => e.id === bId);
+
 
   const nodeDiff = useMemo(() => {
     const aFl = new Set(a?.metrics.floodedNodeIds ?? []);
