@@ -41,6 +41,12 @@ export interface SizingAttempt {
   runtimeMs: number;
   passed: boolean;
   reason: string;
+  // Detailed diagnostics for the manifest / CSV / PDF exports
+  engineExitCode: number | null;
+  engineFailReason?: string;
+  analysisErrors: string[];
+  analysisWarnings: string[];
+  engineLogTail: string;
 }
 
 export interface AutoSizeOutcome {
