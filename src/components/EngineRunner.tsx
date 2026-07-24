@@ -28,6 +28,13 @@ import {
   toneForSurcharge,
   type Thresholds,
 } from "@/lib/thresholds";
+import {
+  getEngineProvenance,
+  formatBytes,
+  shortHash,
+  type EngineProvenance,
+} from "@/lib/swmm/provenance";
+import { buildManifest } from "@/lib/swmm/manifest";
 
 interface Props {
   built: BuildResult;
