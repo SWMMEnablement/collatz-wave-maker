@@ -244,8 +244,12 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
       max_surcharge_hours: m.maxSurchargeHours,
       flow_continuity_pct: m.continuityPct,
       runtime_ms: m.runtimeMs,
-      flooded_node_ids: m.metrics.floodedNodes.map((n) => n.id),
-      surcharged_node_ids: m.metrics.surchargedNodes.map((n) => n.id),
+      engine_exit_code: m.engineExitCode,
+      analysis_errors: m.analysisErrors,
+      analysis_warnings: m.analysisWarnings,
+      engine_log_tail: m.engineLogTail,
+      flooded_node_ids: m.metrics?.floodedNodes.map((n) => n.id) ?? [],
+      surcharged_node_ids: m.metrics?.surchargedNodes.map((n) => n.id) ?? [],
     });
     return {
       schema_version: "1.0" as const,
