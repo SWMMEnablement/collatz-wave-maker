@@ -15,7 +15,10 @@ export interface LinkSeries {
   from: number;
   to: number;
   flow: number[];
+  depth: number[];
+  velocity: number[];
 }
+
 
 export interface SystemSeries {
   totalInflow: number[];
