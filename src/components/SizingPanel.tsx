@@ -291,12 +291,18 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
 
   const downloadAutoCsv = () => {
     if (!auto) return;
-    const header = ["diameter", "flooded", "max_d_over_D", "max_velocity", "continuity_pct", "runtime_ms", "passed", "reason", "chosen"];
+    const header = ["diameter", "flooded", "max_d_over_D", "max_velocity", "continuity_pct", "runtime_ms", "exit_code", "analysis_errors", "analysis_warnings", "passed", "reason", "engine_log_tail", "chosen"];
     const rows = auto.attempts.map((a) => [
       a.diameter, a.flooded, a.maxDepthRatio.toFixed(4), a.maxVelocity.toFixed(4),
       a.continuityPct != null ? a.continuityPct.toFixed(4) : "",
-      a.runtimeMs.toFixed(0), a.passed ? "yes" : "no",
-      csvEscape(a.reason), auto.chosen?.diameter === a.diameter ? "yes" : "no",
+      a.runtimeMs.toFixed(0),
+      a.engineExitCode ?? "",
+      csvEscape((a.analysisErrors ?? []).join(" | ")),
+      csvEscape((a.analysisWarnings ?? []).join(" | ")),
+      a.passed ? "yes" : "no",
+      csvEscape(a.reason),
+      csvEscape(a.engineLogTail ?? ""),
+      auto.chosen?.diameter === a.diameter ? "yes" : "no",
     ]);
     const csv = [header, ...rows].map((r) => r.join(",")).join("\n");
     download(`sizing_attempts_n${opts.maxSeed}.csv`, csv, "text/csv");
