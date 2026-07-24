@@ -585,3 +585,30 @@ function ProvCell({ label, value, title }: { label: string; value: string; title
     </div>
   );
 }
+
+function RunStatusBanner({
+  status,
+  warnings,
+  errors,
+  exit,
+}: {
+  status: "VALID" | "COMPLETED_WITH_WARNINGS" | "NUMERICALLY_QUESTIONABLE" | "FAILED";
+  warnings: number;
+  errors: number;
+  exit: number | null;
+}) {
+  const map = {
+    VALID: { bg: "border-emerald-500/40 bg-emerald-500/10 text-emerald-500", label: "VALID" },
+    COMPLETED_WITH_WARNINGS: { bg: "border-amber-500/40 bg-amber-500/10 text-amber-500", label: "COMPLETED · WARNINGS" },
+    NUMERICALLY_QUESTIONABLE: { bg: "border-orange-500/40 bg-orange-500/10 text-orange-500", label: "NUMERICALLY QUESTIONABLE" },
+    FAILED: { bg: "border-destructive/40 bg-destructive/10 text-destructive", label: "FAILED" },
+  }[status];
+  return (
+    <div className={`flex flex-wrap items-center gap-3 rounded-md border px-3 py-2 font-mono text-[11px] uppercase tracking-wider ${map.bg}`}>
+      <span className="font-semibold">Run status · {map.label}</span>
+      <span className="text-muted-foreground normal-case tracking-normal">
+        exit={exit ?? "—"} · errors={errors} · warnings={warnings}
+      </span>
+    </div>
+  );
+}
