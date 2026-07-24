@@ -910,3 +910,161 @@ function buildCsv(p: ExportPayload): string {
   return lines.join("\n") + "\n";
 }
 
+// ---------- Import helpers ----------
+
+function parseImportJson(text: string): ExportPayload {
+  const raw = JSON.parse(text);
+  if (!raw || typeof raw !== "object" || !raw.runA || !raw.runB || !raw.metrics || !raw.nodeDiff) {
+    throw new Error("JSON is missing required fields (runA/runB/metrics/nodeDiff).");
+  }
+  return raw as ExportPayload;
+}
+
+function parseCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQ) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; }
+        else inQ = false;
+      } else cur += ch;
+    } else {
+      if (ch === ',') { out.push(cur); cur = ""; }
+      else if (ch === '"') inQ = true;
+      else cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+function coerceNumber(v: string): number | null {
+  if (v === "" || v === "null" || v === "undefined") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseImportCsv(text: string): ExportPayload {
+  const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
+  const metaMap: Record<string, [string, string]> = {};
+  const metricsArr: ExportPayload["metrics"] = [];
+  const nodeGroups: Record<string, string[]> = {
+    flooded_only_a: [], flooded_only_b: [], flooded_both: [],
+    surcharged_only_a: [], surcharged_only_b: [], surcharged_both: [],
+  };
+  let generatedAt = new Date().toISOString();
+  let section: "none" | "meta" | "metric" | "node" = "none";
+
+  for (const raw of lines) {
+    if (raw.startsWith("# generated_at")) {
+      const parts = parseCsvLine(raw.replace(/^#\s*/, ""));
+      if (parts[1]) generatedAt = parts[1];
+      continue;
+    }
+    if (raw.startsWith("#")) continue;
+    const cols = parseCsvLine(raw);
+    if (cols[0] === "section" && cols[1] === "field") { section = "meta"; continue; }
+    if (cols[0] === "metric" && cols[1] === "run_a") { section = "metric"; continue; }
+    if (cols[0] === "node_diff_group") { section = "node"; continue; }
+    if (section === "meta" && cols[0] === "run_meta") {
+      metaMap[cols[1]] = [cols[2] ?? "", cols[3] ?? ""];
+    } else if (section === "metric" && cols[0]) {
+      metricsArr.push({
+        metric: cols[0],
+        runA: coerceNumber(cols[1] ?? ""),
+        runB: coerceNumber(cols[2] ?? ""),
+        delta: coerceNumber(cols[3] ?? ""),
+      });
+    } else if (section === "node" && cols[0] && cols[1]) {
+      const g = nodeGroups[cols[0]];
+      if (g) g.push(cols[1]);
+    }
+  }
+
+  const makeSummary = (idx: 0 | 1): RunSummary => ({
+    id: metaMap.id?.[idx] || `imported_${idx}`,
+    label: metaMap.label?.[idx] || `Run ${idx === 0 ? "A" : "B"}`,
+    timestamp: metaMap.timestamp?.[idx] || new Date().toISOString(),
+    inputVersion: metaMap.inputVersion?.[idx] || "imported",
+    engine: metaMap.engine?.[idx] || "wasm",
+    nodeCount: Number(metaMap.nodeCount?.[idx] || 0),
+    conduitCount: Number(metaMap.conduitCount?.[idx] || 0),
+    durationSec: Number(metaMap.durationSec?.[idx] || 0),
+    steps: Number(metaMap.steps?.[idx] || 0),
+    optsJson: metaMap.optsJson?.[idx] || "{}",
+  });
+
+  return {
+    generatedAt,
+    runA: makeSummary(0),
+    runB: makeSummary(1),
+    metrics: metricsArr,
+    nodeDiff: {
+      flooded: {
+        onlyA: nodeGroups.flooded_only_a,
+        onlyB: nodeGroups.flooded_only_b,
+        both: nodeGroups.flooded_both,
+      },
+      surcharged: {
+        onlyA: nodeGroups.surcharged_only_a,
+        onlyB: nodeGroups.surcharged_only_b,
+        both: nodeGroups.surcharged_both,
+      },
+    },
+  };
+}
+
+function payloadToEntries(p: ExportPayload): [RunHistoryEntry, RunHistoryEntry] {
+  const metricByName = new Map(p.metrics.map((m) => [m.metric, m]));
+  const num = (name: string, side: "runA" | "runB"): number | null => {
+    const m = metricByName.get(name);
+    if (!m) return null;
+    const v = m[side];
+    return v == null ? null : Number(v);
+  };
+
+  const toEntry = (side: "runA" | "runB", summary: RunSummary): RunHistoryEntry => {
+    const isA = side === "runA";
+    const floodedIds = isA
+      ? [...p.nodeDiff.flooded.onlyA, ...p.nodeDiff.flooded.both]
+      : [...p.nodeDiff.flooded.onlyB, ...p.nodeDiff.flooded.both];
+    const surchargedIds = isA
+      ? [...p.nodeDiff.surcharged.onlyA, ...p.nodeDiff.surcharged.both]
+      : [...p.nodeDiff.surcharged.onlyB, ...p.nodeDiff.surcharged.both];
+    let opts: Partial<InpOptions> = {};
+    try { opts = JSON.parse(summary.optsJson || "{}"); } catch { /* ignore */ }
+    const stamp = Date.parse(summary.timestamp);
+    const engine: "wasm" | "stub" = summary.engine === "stub" ? "stub" : "wasm";
+    return {
+      id: `imported_${summary.id}`,
+      timestamp: Number.isFinite(stamp) ? stamp : Date.now(),
+      label: `${summary.label} · imported`,
+      inputVersion: summary.inputVersion,
+      opts,
+      meta: {
+        engine,
+        durationMs: (summary.durationSec || 0) * 1000,
+        nodeCount: summary.nodeCount || 0,
+        conduitCount: summary.conduitCount || 0,
+        steps: summary.steps || 0,
+      },
+      metrics: {
+        flowContinuityPct: num("flow_continuity_pct", side),
+        runoffContinuityPct: num("runoff_continuity_pct", side),
+        floodedNodes: num("flooded_nodes", side) ?? floodedIds.length,
+        surchargedNodes: num("surcharged_nodes", side) ?? surchargedIds.length,
+        maxSurchargeHours: num("max_surcharge_hours", side),
+        analysisErrors: num("analysis_errors", side) ?? 0,
+        floodedNodeIds: floodedIds,
+        surchargedNodeIds: surchargedIds,
+      },
+    };
+  };
+
+  return [toEntry("runA", p.runA), toEntry("runB", p.runB)];
+}
+
+
