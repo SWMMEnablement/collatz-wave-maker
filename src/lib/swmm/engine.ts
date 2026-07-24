@@ -341,6 +341,7 @@ function parseOutBufferToResult(
     engine: "wasm",
     log: logLines.join("\n"),
     durationMs,
+    exitCode,
   };
 }
 
