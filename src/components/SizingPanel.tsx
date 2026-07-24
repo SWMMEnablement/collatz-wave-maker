@@ -426,9 +426,38 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
           </Field>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button onClick={runAuto} disabled={running !== null}>
-            {running === "auto" ? "Auto-sizing…" : "Run auto-size"}
+          <Button onClick={() => void runAuto({ fresh: true })} disabled={running !== null}>
+            {running === "auto" ? "Auto-sizing…" : resumeAttempts.length ? "Restart fresh" : "Run auto-size"}
           </Button>
+          {resumeAttempts.length > 0 && running === null && (
+            <Button size="sm" variant="secondary" onClick={() => void runAuto()}>
+              Resume from {resumeAttempts.length} attempt{resumeAttempts.length === 1 ? "" : "s"}
+            </Button>
+          )}
+          {attemptsView.length > 0 && running === null && (
+            <Button size="sm" variant="outline" onClick={restartAutoFromHere}>
+              Restart from here
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => resumeFileRef.current?.click()}
+            disabled={running !== null}
+          >
+            Load manifest…
+          </Button>
+          <input
+            ref={resumeFileRef}
+            type="file"
+            accept="application/json"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void onResumeFile(f);
+              e.currentTarget.value = "";
+            }}
+          />
           {auto && (
             <>
               <Button size="sm" variant="outline" onClick={downloadAutoManifest}>manifest.json</Button>
