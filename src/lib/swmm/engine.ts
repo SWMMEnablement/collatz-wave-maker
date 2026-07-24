@@ -222,6 +222,7 @@ async function runWasm(built: BuildResult): Promise<EngineResult | null> {
       engine: "wasm",
       log: log.join("\n"),
       durationMs: performance.now() - t0,
+      exitCode: rc,
     };
   } catch (e) {
     log.push("wasm error: " + (e as Error).message);
