@@ -7,13 +7,14 @@ import type { RptSummary } from "./rpt";
 import type { EngineProvenance } from "./provenance";
 
 export interface RunManifest {
-  schema_version: "1.0";
+  schema_version: "1.1";
   generator_version: string;
   generated_at: string;
+  configuration_sha256: string | null;
   generator: {
     seed_min: number;
     seed_max: number;
-    integer_mode: "Number (IEEE-754 float64)";
+    integer_mode: "BigInt-guarded, f64 node keys";
     iteration_cap: number;
     inflow_scope: InpOptions["inflowScope"];
     progressive_sizing: boolean;
@@ -38,11 +39,20 @@ export interface RunManifest {
     inp_sha256: string | null;
     inp_bytes: number;
   };
+  collatz: {
+    max_trajectory_value: string;
+    safe_integer_ok: boolean;
+    unsafe_truncated_seeds: number[];
+    iteration_capped_seeds: number[];
+    unresolved_seeds: number[];
+    cycles_detected: number;
+  };
   engine: {
     name: string;
     version: string;
     package: string;
     package_version: string;
+    package_source: string;
     wrapper_commit: string;
     wasm_sha256: string | null;
     wasm_bytes: number | null;
@@ -58,6 +68,8 @@ export interface RunManifest {
     surcharged_node_ids: string[];
     max_surcharge_hours: number | null;
     analysis_errors: string[];
+    analysis_warnings: string[];
+    status: "VALID" | "COMPLETED_WITH_WARNINGS" | "NUMERICALLY_QUESTIONABLE" | "FAILED";
   };
 }
 
@@ -73,6 +85,29 @@ async function sha256Hex(text: string): Promise<string | null> {
     .join("");
 }
 
+export function classifyRun(
+  metrics: RptSummary,
+  result: EngineResult,
+  opts: {
+    maxAbsContinuityPct?: number;
+    maxFloodedNodes?: number;
+  } = {},
+): "VALID" | "COMPLETED_WITH_WARNINGS" | "NUMERICALLY_QUESTIONABLE" | "FAILED" {
+  const contLimit = opts.maxAbsContinuityPct ?? 1.0;
+  const floodLimit = opts.maxFloodedNodes ?? Infinity;
+  if (result.exitCode != null && result.exitCode !== 0) return "FAILED";
+  if (metrics.analysisErrors.length > 0) return "FAILED";
+  const cont = Math.max(
+    Math.abs(metrics.flowContinuityPct ?? 0),
+    Math.abs(metrics.runoffContinuityPct ?? 0),
+  );
+  if (cont > contLimit || metrics.floodedNodes.length > floodLimit) {
+    return "NUMERICALLY_QUESTIONABLE";
+  }
+  if (metrics.analysisWarnings.length > 0) return "COMPLETED_WITH_WARNINGS";
+  return "VALID";
+}
+
 export async function buildManifest(
   opts: InpOptions,
   built: BuildResult,
@@ -80,14 +115,17 @@ export async function buildManifest(
   run?: { result: EngineResult; metrics: RptSummary },
 ): Promise<RunManifest> {
   const inpSha = await sha256Hex(built.inp);
+  const configSha = await sha256Hex(JSON.stringify(opts));
+  const diag = built.tree.diagnostics;
   const manifest: RunManifest = {
-    schema_version: "1.0",
+    schema_version: "1.1",
     generator_version: GENERATOR_VERSION,
     generated_at: new Date().toISOString(),
+    configuration_sha256: configSha,
     generator: {
       seed_min: 2,
       seed_max: opts.maxSeed,
-      integer_mode: "Number (IEEE-754 float64)",
+      integer_mode: "BigInt-guarded, f64 node keys",
       iteration_cap: ITERATION_CAP,
       inflow_scope: opts.inflowScope,
       progressive_sizing: opts.progressiveSizing,
@@ -112,11 +150,20 @@ export async function buildManifest(
       inp_sha256: inpSha,
       inp_bytes: new TextEncoder().encode(built.inp).byteLength,
     },
+    collatz: {
+      max_trajectory_value: diag.maxTrajectoryValue,
+      safe_integer_ok: diag.safeIntegerOk,
+      unsafe_truncated_seeds: diag.unsafeTruncatedSeeds,
+      iteration_capped_seeds: diag.iterationCappedSeeds,
+      unresolved_seeds: diag.unresolvedSeeds,
+      cycles_detected: diag.cyclesDetected,
+    },
     engine: {
       name: prov.engineName,
       version: prov.engineVersion,
       package: prov.packageName,
       package_version: prov.packageVersion,
+      package_source: "vendored browser-adapted build of @fileops/swmm-wasm at /wasm/swmm5.js",
       wrapper_commit: prov.wrapperCommit,
       wasm_sha256: prov.assetSha256,
       wasm_bytes: prov.assetBytes,
@@ -134,6 +181,8 @@ export async function buildManifest(
       surcharged_node_ids: run.metrics.surchargedNodes.map((n) => n.id),
       max_surcharge_hours: run.metrics.maxSurchargeHours,
       analysis_errors: run.metrics.analysisErrors,
+      analysis_warnings: run.metrics.analysisWarnings,
+      status: classifyRun(run.metrics, run.result),
     };
   }
   return manifest;

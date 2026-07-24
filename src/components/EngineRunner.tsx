@@ -34,7 +34,7 @@ import {
   shortHash,
   type EngineProvenance,
 } from "@/lib/swmm/provenance";
-import { buildManifest } from "@/lib/swmm/manifest";
+import { buildManifest, classifyRun } from "@/lib/swmm/manifest";
 
 interface Props {
   built: BuildResult;
@@ -379,33 +379,36 @@ export function EngineRunner({
       </div>
 
       {result && runSummary && (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-          <MetricCard
-            label="Flow continuity"
-            value={runSummary.flowContinuityPct != null ? runSummary.flowContinuityPct.toFixed(3) + " %" : "—"}
-            tone={toneForContinuity(runSummary.flowContinuityPct, thresholds, "flow")}
-          />
-          <MetricCard
-            label="Runoff continuity"
-            value={runSummary.runoffContinuityPct != null ? runSummary.runoffContinuityPct.toFixed(3) + " %" : "—"}
-            tone={toneForContinuity(runSummary.runoffContinuityPct, thresholds, "runoff")}
-          />
-          <MetricCard
-            label="Flooded nodes"
-            value={String(runSummary.floodedNodes.length)}
-            tone={toneForFlooded(runSummary.floodedNodes.length, thresholds)}
-          />
-          <MetricCard
-            label="Max surcharge"
-            value={runSummary.maxSurchargeHours != null ? runSummary.maxSurchargeHours.toFixed(2) + " h" : "0 h"}
-            tone={toneForSurcharge(runSummary.maxSurchargeHours, thresholds)}
-          />
-          <MetricCard
-            label="Analysis errors"
-            value={String(runSummary.analysisErrors.length)}
-            tone={runSummary.analysisErrors.length > 0 ? "bad" : "ok"}
-          />
-        </div>
+        <>
+          <RunStatusBanner status={classifyRun(runSummary, result)} warnings={runSummary.analysisWarnings.length} errors={runSummary.analysisErrors.length} exit={result.exitCode} />
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+            <MetricCard
+              label="Flow continuity"
+              value={runSummary.flowContinuityPct != null ? runSummary.flowContinuityPct.toFixed(3) + " %" : "—"}
+              tone={toneForContinuity(runSummary.flowContinuityPct, thresholds, "flow")}
+            />
+            <MetricCard
+              label="Runoff continuity"
+              value={runSummary.runoffContinuityPct != null ? runSummary.runoffContinuityPct.toFixed(3) + " %" : "—"}
+              tone={toneForContinuity(runSummary.runoffContinuityPct, thresholds, "runoff")}
+            />
+            <MetricCard
+              label="Flooded nodes"
+              value={String(runSummary.floodedNodes.length)}
+              tone={toneForFlooded(runSummary.floodedNodes.length, thresholds)}
+            />
+            <MetricCard
+              label="Max surcharge"
+              value={runSummary.maxSurchargeHours != null ? runSummary.maxSurchargeHours.toFixed(2) + " h" : "0 h"}
+              tone={toneForSurcharge(runSummary.maxSurchargeHours, thresholds)}
+            />
+            <MetricCard
+              label="Analysis errors / warnings"
+              value={`${runSummary.analysisErrors.length} / ${runSummary.analysisWarnings.length}`}
+              tone={runSummary.analysisErrors.length > 0 ? "bad" : runSummary.analysisWarnings.length > 0 ? "warn" : "ok"}
+            />
+          </div>
+        </>
       )}
 
       {provenance && (
@@ -579,6 +582,33 @@ function ProvCell({ label, value, title }: { label: string; value: string; title
     <div className="flex min-w-0 flex-col" title={title}>
       <span className="text-[9px] text-muted-foreground/70">{label}</span>
       <span className="truncate text-foreground/90 normal-case">{value}</span>
+    </div>
+  );
+}
+
+function RunStatusBanner({
+  status,
+  warnings,
+  errors,
+  exit,
+}: {
+  status: "VALID" | "COMPLETED_WITH_WARNINGS" | "NUMERICALLY_QUESTIONABLE" | "FAILED";
+  warnings: number;
+  errors: number;
+  exit: number | null;
+}) {
+  const map = {
+    VALID: { bg: "border-emerald-500/40 bg-emerald-500/10 text-emerald-500", label: "VALID" },
+    COMPLETED_WITH_WARNINGS: { bg: "border-amber-500/40 bg-amber-500/10 text-amber-500", label: "COMPLETED · WARNINGS" },
+    NUMERICALLY_QUESTIONABLE: { bg: "border-orange-500/40 bg-orange-500/10 text-orange-500", label: "NUMERICALLY QUESTIONABLE" },
+    FAILED: { bg: "border-destructive/40 bg-destructive/10 text-destructive", label: "FAILED" },
+  }[status];
+  return (
+    <div className={`flex flex-wrap items-center gap-3 rounded-md border px-3 py-2 font-mono text-[11px] uppercase tracking-wider ${map.bg}`}>
+      <span className="font-semibold">Run status · {map.label}</span>
+      <span className="text-muted-foreground normal-case tracking-normal">
+        exit={exit ?? "—"} · errors={errors} · warnings={warnings}
+      </span>
     </div>
   );
 }

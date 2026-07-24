@@ -150,20 +150,20 @@ function Page() {
             <ThemeToggle />
           </div>
           <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-            Every integer from <span className="text-primary">1 through N</span> is used as a
-            seed. Every distinct integer encountered along those trajectories becomes
-            a junction, so the network typically has many more nodes than seeds.
-            Every Collatz step (n/2 or 3n+1) becomes a conduit, and node&nbsp;1 is a
-            FREE outfall that all flows drain toward.
+            Integers <span className="text-primary">2 through N</span> are used as
+            seeds. Every distinct trajectory value they encounter becomes a
+            junction, so the network typically has many more nodes than seeds.
+            Every Collatz step (n/2 or 3n+1) becomes a conduit, and node&nbsp;1
+            is the FREE outfall that all flows drain toward.
           </p>
           <p className="mt-2 max-w-2xl text-xs text-muted-foreground">
             <span className="font-mono uppercase tracking-wider text-accent">Model status:</span>{" "}
             the <code className="font-mono">.inp</code>, GeoJSON, and geometric HGL preview
             are generated deterministically from the topology. The{" "}
             <strong className="text-primary">EPA SWMM 5.2.4 engine ships as WASM</strong>{" "}
-            (<code className="font-mono">@fileops/swmm-wasm</code>) under{" "}
-            <code className="font-mono text-primary">/wasm/swmm5.js</code> and runs in a Web
-            Worker — the Engine tab reports continuity error, flooded nodes, and max
+            (vendored, browser-adapted from <code className="font-mono">@fileops/swmm-wasm</code>)
+            under <code className="font-mono text-primary">/wasm/swmm5.js</code> and runs in a
+            Web Worker — the Engine tab reports continuity error, flooded nodes, and max
             surcharge from the actual <code className="font-mono">.rpt</code>, and exposes
             the WASM SHA-256 plus a downloadable run manifest.
           </p>
@@ -236,7 +236,14 @@ function Page() {
               )}
               <div className="pt-1">engine: <span className="text-primary">EPA SWMM 5.2.4 · WASM</span></div>
               <div>inp size: <span className="text-primary">{(new Blob([built.inp]).size / 1024).toFixed(1)} KiB</span></div>
-              <div>integer mode: <span className="text-primary">Number (f64)</span> · cap 100k/seed</div>
+              <div>integer mode: <span className={built.tree.diagnostics.safeIntegerOk ? "text-primary" : "text-destructive"}>BigInt-guarded · f64 keys</span> · cap {built.tree.diagnostics.iterationCap.toLocaleString()}/seed</div>
+              <div>max trajectory value: <span className="text-primary" title={built.tree.diagnostics.maxTrajectoryValue}>{shortNumber(built.tree.diagnostics.maxTrajectoryValue)}</span></div>
+              {built.tree.diagnostics.unsafeTruncatedSeeds.length > 0 && (
+                <div className="text-destructive">unsafe-integer truncated: {built.tree.diagnostics.unsafeTruncatedSeeds.length} seed(s)</div>
+              )}
+              {built.tree.diagnostics.iterationCappedSeeds.length > 0 && (
+                <div className="text-accent">iteration-capped: {built.tree.diagnostics.iterationCappedSeeds.length} seed(s)</div>
+              )}
               {opts.maxSeed >= 2000 && (
                 <div className="text-accent">large-model warning: {opts.maxSeed} seeds may slow the browser</div>
               )}
@@ -371,6 +378,12 @@ const PRESETS: Array<{ label: string; title: string; patch: Partial<InpOptions> 
   { label: "N=1000",  title: "Big network — ~2k nodes",                        patch: { maxSeed: 1000 } },
   { label: "Stress",  title: "Stress test — 5000 seeds, may slow rendering",   patch: { maxSeed: 5000 } },
 ];
+
+function shortNumber(decStr: string): string {
+  if (decStr.length <= 12) return Number(decStr).toLocaleString();
+  const head = decStr.slice(0, 4);
+  return `${head[0]}.${head.slice(1)}e+${decStr.length - 1}`;
+}
 
 function Badge({ tone, children }: { tone: "ok" | "warn" | "err"; children: React.ReactNode }) {
   const cls =
