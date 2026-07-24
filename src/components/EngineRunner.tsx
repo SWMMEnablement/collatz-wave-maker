@@ -379,33 +379,36 @@ export function EngineRunner({
       </div>
 
       {result && runSummary && (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-          <MetricCard
-            label="Flow continuity"
-            value={runSummary.flowContinuityPct != null ? runSummary.flowContinuityPct.toFixed(3) + " %" : "—"}
-            tone={toneForContinuity(runSummary.flowContinuityPct, thresholds, "flow")}
-          />
-          <MetricCard
-            label="Runoff continuity"
-            value={runSummary.runoffContinuityPct != null ? runSummary.runoffContinuityPct.toFixed(3) + " %" : "—"}
-            tone={toneForContinuity(runSummary.runoffContinuityPct, thresholds, "runoff")}
-          />
-          <MetricCard
-            label="Flooded nodes"
-            value={String(runSummary.floodedNodes.length)}
-            tone={toneForFlooded(runSummary.floodedNodes.length, thresholds)}
-          />
-          <MetricCard
-            label="Max surcharge"
-            value={runSummary.maxSurchargeHours != null ? runSummary.maxSurchargeHours.toFixed(2) + " h" : "0 h"}
-            tone={toneForSurcharge(runSummary.maxSurchargeHours, thresholds)}
-          />
-          <MetricCard
-            label="Analysis errors"
-            value={String(runSummary.analysisErrors.length)}
-            tone={runSummary.analysisErrors.length > 0 ? "bad" : "ok"}
-          />
-        </div>
+        <>
+          <RunStatusBanner status={classifyRun(runSummary, result)} warnings={runSummary.analysisWarnings.length} errors={runSummary.analysisErrors.length} exit={result.exitCode} />
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+            <MetricCard
+              label="Flow continuity"
+              value={runSummary.flowContinuityPct != null ? runSummary.flowContinuityPct.toFixed(3) + " %" : "—"}
+              tone={toneForContinuity(runSummary.flowContinuityPct, thresholds, "flow")}
+            />
+            <MetricCard
+              label="Runoff continuity"
+              value={runSummary.runoffContinuityPct != null ? runSummary.runoffContinuityPct.toFixed(3) + " %" : "—"}
+              tone={toneForContinuity(runSummary.runoffContinuityPct, thresholds, "runoff")}
+            />
+            <MetricCard
+              label="Flooded nodes"
+              value={String(runSummary.floodedNodes.length)}
+              tone={toneForFlooded(runSummary.floodedNodes.length, thresholds)}
+            />
+            <MetricCard
+              label="Max surcharge"
+              value={runSummary.maxSurchargeHours != null ? runSummary.maxSurchargeHours.toFixed(2) + " h" : "0 h"}
+              tone={toneForSurcharge(runSummary.maxSurchargeHours, thresholds)}
+            />
+            <MetricCard
+              label="Analysis errors / warnings"
+              value={`${runSummary.analysisErrors.length} / ${runSummary.analysisWarnings.length}`}
+              tone={runSummary.analysisErrors.length > 0 ? "bad" : runSummary.analysisWarnings.length > 0 ? "warn" : "ok"}
+            />
+          </div>
+        </>
       )}
 
       {provenance && (
