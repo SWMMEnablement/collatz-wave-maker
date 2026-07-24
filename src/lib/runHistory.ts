@@ -95,6 +95,9 @@ export function makeHistoryEntry(
       surchargedNodes: metrics.surchargedNodes.length,
       maxSurchargeHours: metrics.maxSurchargeHours,
       analysisErrors: metrics.analysisErrors.length,
+      floodedNodeIds: metrics.floodedNodes.map((n) => n.id),
+      surchargedNodeIds: metrics.surchargedNodes.map((n) => n.id),
+
     },
   };
   return entry;
