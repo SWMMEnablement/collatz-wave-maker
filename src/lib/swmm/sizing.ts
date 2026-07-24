@@ -21,11 +21,8 @@ export function standardDiametersFor(units: InpOptions["flowUnits"]): number[] {
 }
 
 export interface SizingConstraints {
-  /** Max flow depth / pipe diameter ratio (e.g. 0.85). */
   maxDepthRatio: number;
-  /** Max flow velocity (ft/s or m/s per flow units). */
   maxVelocity: number;
-  /** Allowed flooded node count. */
   maxFloodedNodes: number;
 }
 
@@ -54,7 +51,6 @@ export interface AutoSizeOutcome {
   finalMetrics: RptSummary;
 }
 
-/** For uniform sizing: max flow depth / diameter across all links & times. */
 function computeMaxDepthRatio(result: EngineResult, diameterFor: (linkId: string) => number): number {
   let mx = 0;
   for (const l of result.links) {
@@ -79,16 +75,32 @@ function computeMaxVelocity(result: EngineResult): number {
   return mx;
 }
 
-/**
- * Iteratively try candidate diameters (ascending). Uniform mode.
- * Returns the smallest diameter that satisfies all constraints, or null
- * if none do (in which case the final result is from the largest diameter tried).
- */
+export class CancelledError extends Error {
+  constructor() { super("cancelled"); this.name = "CancelledError"; }
+}
+
+function runWithSignal(
+  built: BuildResult,
+  signal?: AbortSignal,
+  onEnginePct?: (pct: number) => void,
+): Promise<EngineResult> {
+  const handle = startEngine(built, { onProgress: onEnginePct });
+  if (signal) {
+    if (signal.aborted) { handle.cancel(); return Promise.reject(new CancelledError()); }
+    signal.addEventListener("abort", () => handle.cancel(), { once: true });
+  }
+  return handle.promise.catch((e) => {
+    if (signal?.aborted) throw new CancelledError();
+    throw e;
+  });
+}
+
 export async function autoSizeUniform(
   baseOpts: InpOptions,
   constraints: SizingConstraints,
   diameters: number[] = standardDiametersFor(baseOpts.flowUnits),
-  onProgress?: (idx: number, total: number, attempt: SizingAttempt) => void,
+  onProgress?: (idx: number, total: number, attempt: SizingAttempt, enginePct?: number) => void,
+  signal?: AbortSignal,
 ): Promise<AutoSizeOutcome> {
   const sorted = [...diameters].sort((a, b) => a - b);
   const attempts: SizingAttempt[] = [];
@@ -98,11 +110,17 @@ export async function autoSizeUniform(
   let finalMetrics: RptSummary | null = null;
 
   for (let i = 0; i < sorted.length; i++) {
+    if (signal?.aborted) throw new CancelledError();
     const d = sorted[i];
     const opts: InpOptions = { ...baseOpts, diameter: d, progressiveSizing: false };
     const built = buildInp(opts);
     const t0 = performance.now();
-    const result = await startEngine(built).promise;
+    const result = await runWithSignal(built, signal, (pct) => {
+      onProgress?.(i + 1, sorted.length, {
+        diameter: d, flooded: 0, maxDepthRatio: 0, maxVelocity: 0,
+        continuityPct: null, runtimeMs: 0, passed: false, reason: "running",
+      }, pct);
+    });
     const runtimeMs = performance.now() - t0;
     const metrics = parseRptSummary(result.rpt);
     const maxDR = computeMaxDepthRatio(result, () => d);
@@ -130,7 +148,7 @@ export async function autoSizeUniform(
     finalBuilt = built;
     finalResult = result;
     finalMetrics = metrics;
-    onProgress?.(i + 1, sorted.length, attempt);
+    onProgress?.(i + 1, sorted.length, attempt, 100);
     if (passed) {
       chosen = attempt;
       break;
@@ -163,10 +181,12 @@ export interface ModeRunSummary {
 async function runOne(
   opts: InpOptions,
   mode: "uniform" | "progressive",
+  signal?: AbortSignal,
+  onPct?: (pct: number) => void,
 ): Promise<ModeRunSummary> {
   const built = buildInp(opts);
   const t0 = performance.now();
-  const result = await startEngine(built).promise;
+  const result = await runWithSignal(built, signal, onPct);
   const runtimeMs = performance.now() - t0;
   const metrics = parseRptSummary(result.rpt);
   const maxDR = computeMaxDepthRatio(result, (id) => built.conduitDiameter.get(id) ?? opts.diameter);
@@ -186,14 +206,14 @@ async function runOne(
   };
 }
 
-/** One-click compare: uniform vs √upstream progressive using the same base diameter. */
 export async function compareDiameterModes(
   baseOpts: InpOptions,
-  onProgress?: (label: string) => void,
+  onProgress?: (label: string, enginePct?: number) => void,
+  signal?: AbortSignal,
 ): Promise<{ uniform: ModeRunSummary; progressive: ModeRunSummary }> {
-  onProgress?.("uniform");
-  const uniform = await runOne({ ...baseOpts, progressiveSizing: false }, "uniform");
-  onProgress?.("progressive");
-  const progressive = await runOne({ ...baseOpts, progressiveSizing: true }, "progressive");
+  onProgress?.("uniform", 0);
+  const uniform = await runOne({ ...baseOpts, progressiveSizing: false }, "uniform", signal, (p) => onProgress?.("uniform", p));
+  onProgress?.("progressive", 0);
+  const progressive = await runOne({ ...baseOpts, progressiveSizing: true }, "progressive", signal, (p) => onProgress?.("progressive", p));
   return { uniform, progressive };
 }

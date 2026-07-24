@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   autoSizeUniform,
+  CancelledError,
   compareDiameterModes,
   defaultSizingConstraints,
   standardDiametersFor,
@@ -14,6 +15,8 @@ import {
 } from "@/lib/swmm/sizing";
 import type { InpOptions } from "@/lib/swmm/inp";
 import type { EngineResult } from "@/lib/swmm/engine";
+import { getEngineProvenance } from "@/lib/swmm/provenance";
+import { GENERATOR_VERSION } from "@/lib/swmm/manifest";
 
 interface Props {
   opts: InpOptions;
@@ -25,26 +28,41 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
   const [constraints, setConstraints] = useState<SizingConstraints>(defaultSizingConstraints);
   const [running, setRunning] = useState<null | "auto" | "compare">(null);
   const [progress, setProgress] = useState<string>("");
+  const [pct, setPct] = useState<number>(0);
   const [auto, setAuto] = useState<AutoSizeOutcome | null>(null);
   const [compare, setCompare] = useState<{ uniform: ModeRunSummary; progressive: ModeRunSummary } | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const cancel = () => {
+    abortRef.current?.abort();
+    setProgress("cancelling…");
+  };
 
   const runAuto = async () => {
     setRunning("auto");
     setErr(null);
     setAuto(null);
+    setPct(0);
+    const ac = new AbortController();
+    abortRef.current = ac;
     try {
       const diameters = standardDiametersFor(opts.flowUnits);
-      const out = await autoSizeUniform(opts, constraints, diameters, (idx, total, a) => {
-        setProgress(`try ${idx}/${total}: Ø${a.diameter} → ${a.passed ? "OK" : a.reason}`);
-      });
+      const out = await autoSizeUniform(opts, constraints, diameters, (idx, total, a, epct) => {
+        const stepPct = ((idx - 1) + (epct ?? 0) / 100) / total * 100;
+        setPct(Math.min(99, stepPct));
+        setProgress(`try ${idx}/${total}: Ø${a.diameter}${a.reason === "running" ? ` · engine ${Math.round(epct ?? 0)}%` : ` → ${a.passed ? "OK" : a.reason}`}`);
+      }, ac.signal);
+      setPct(100);
       setAuto(out);
       if (out.finalResult) onResult?.(out.finalResult);
     } catch (e) {
-      setErr((e as Error).message);
+      if (e instanceof CancelledError) setErr("cancelled");
+      else setErr((e as Error).message);
     } finally {
       setRunning(null);
       setProgress("");
+      abortRef.current = null;
     }
   };
 
@@ -52,22 +70,218 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
     setRunning("compare");
     setErr(null);
     setCompare(null);
+    setPct(0);
+    const ac = new AbortController();
+    abortRef.current = ac;
     try {
-      const c = await compareDiameterModes(opts, (label) => setProgress(`running ${label}…`));
+      const c = await compareDiameterModes(opts, (label, epct) => {
+        const base = label === "uniform" ? 0 : 50;
+        setPct(Math.min(99, base + (epct ?? 0) / 2));
+        setProgress(`running ${label}… ${Math.round(epct ?? 0)}%`);
+      }, ac.signal);
+      setPct(100);
       setCompare(c);
     } catch (e) {
-      setErr((e as Error).message);
+      if (e instanceof CancelledError) setErr("cancelled");
+      else setErr((e as Error).message);
     } finally {
       setRunning(null);
       setProgress("");
+      abortRef.current = null;
     }
   };
 
   const unitLen = opts.flowUnits === "CFS" ? "ft" : "m";
   const unitVel = opts.flowUnits === "CFS" ? "ft/s" : "m/s";
 
+  const buildSizingManifest = async () => {
+    if (!auto) return null;
+    const prov = await getEngineProvenance();
+    return {
+      schema_version: "1.0" as const,
+      kind: "auto_size_uniform" as const,
+      generator_version: GENERATOR_VERSION,
+      generated_at: new Date().toISOString(),
+      base_options: opts,
+      constraints,
+      candidate_diameters: standardDiametersFor(opts.flowUnits),
+      chosen_diameter: auto.chosen?.diameter ?? null,
+      chosen_passed: !!auto.chosen,
+      attempts: auto.attempts,
+      final_metrics: {
+        flow_continuity_pct: auto.finalMetrics.flowContinuityPct,
+        runoff_continuity_pct: auto.finalMetrics.runoffContinuityPct,
+        flooded_nodes: auto.finalMetrics.floodedNodes.map((n) => n.id),
+        surcharged_nodes: auto.finalMetrics.surchargedNodes.map((n) => n.id),
+        max_surcharge_hours: auto.finalMetrics.maxSurchargeHours,
+      },
+      engine: prov,
+      units: { length: unitLen, velocity: unitVel },
+    };
+  };
+
+  const buildCompareManifest = async () => {
+    if (!compare) return null;
+    const prov = await getEngineProvenance();
+    const pack = (m: ModeRunSummary) => ({
+      mode: m.mode,
+      diameter: m.diameter,
+      progressive: m.mode === "progressive",
+      max_depth_ratio: m.maxDepthRatio,
+      max_velocity: m.maxVelocity,
+      flooded: m.flooded,
+      max_surcharge_hours: m.maxSurchargeHours,
+      flow_continuity_pct: m.continuityPct,
+      runtime_ms: m.runtimeMs,
+      flooded_node_ids: m.metrics.floodedNodes.map((n) => n.id),
+      surcharged_node_ids: m.metrics.surchargedNodes.map((n) => n.id),
+    });
+    return {
+      schema_version: "1.0" as const,
+      kind: "compare_uniform_vs_progressive" as const,
+      generator_version: GENERATOR_VERSION,
+      generated_at: new Date().toISOString(),
+      base_options: opts,
+      uniform: pack(compare.uniform),
+      progressive: pack(compare.progressive),
+      delta: {
+        flooded: compare.progressive.flooded - compare.uniform.flooded,
+        max_depth_ratio: compare.progressive.maxDepthRatio - compare.uniform.maxDepthRatio,
+        max_velocity: compare.progressive.maxVelocity - compare.uniform.maxVelocity,
+        max_surcharge_hours:
+          (compare.progressive.maxSurchargeHours ?? 0) - (compare.uniform.maxSurchargeHours ?? 0),
+        runtime_ms: compare.progressive.runtimeMs - compare.uniform.runtimeMs,
+      },
+      engine: prov,
+      units: { length: unitLen, velocity: unitVel },
+    };
+  };
+
+  const download = (name: string, data: string, mime: string) => {
+    const blob = new Blob([data], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = name; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadAutoManifest = async () => {
+    const m = await buildSizingManifest();
+    if (m) download(`sizing_manifest_n${opts.maxSeed}.json`, JSON.stringify(m, null, 2), "application/json");
+  };
+  const downloadCompareManifest = async () => {
+    const m = await buildCompareManifest();
+    if (m) download(`compare_manifest_n${opts.maxSeed}.json`, JSON.stringify(m, null, 2), "application/json");
+  };
+
+  const downloadAutoCsv = () => {
+    if (!auto) return;
+    const header = ["diameter", "flooded", "max_d_over_D", "max_velocity", "continuity_pct", "runtime_ms", "passed", "reason", "chosen"];
+    const rows = auto.attempts.map((a) => [
+      a.diameter, a.flooded, a.maxDepthRatio.toFixed(4), a.maxVelocity.toFixed(4),
+      a.continuityPct != null ? a.continuityPct.toFixed(4) : "",
+      a.runtimeMs.toFixed(0), a.passed ? "yes" : "no",
+      csvEscape(a.reason), auto.chosen?.diameter === a.diameter ? "yes" : "no",
+    ]);
+    const csv = [header, ...rows].map((r) => r.join(",")).join("\n");
+    download(`sizing_attempts_n${opts.maxSeed}.csv`, csv, "text/csv");
+  };
+
+  const downloadCompareCsv = () => {
+    if (!compare) return;
+    const u = compare.uniform, p = compare.progressive;
+    const rows: (string | number)[][] = [
+      ["metric", "uniform", "progressive", "delta"],
+      ["diameter_base", u.diameter, p.diameter, p.diameter - u.diameter],
+      ["max_d_over_D", u.maxDepthRatio.toFixed(4), p.maxDepthRatio.toFixed(4), (p.maxDepthRatio - u.maxDepthRatio).toFixed(4)],
+      ["max_velocity", u.maxVelocity.toFixed(4), p.maxVelocity.toFixed(4), (p.maxVelocity - u.maxVelocity).toFixed(4)],
+      ["flooded_nodes", u.flooded, p.flooded, p.flooded - u.flooded],
+      ["max_surcharge_hours", u.maxSurchargeHours ?? 0, p.maxSurchargeHours ?? 0, ((p.maxSurchargeHours ?? 0) - (u.maxSurchargeHours ?? 0)).toFixed(4)],
+      ["flow_continuity_pct", u.continuityPct ?? "", p.continuityPct ?? "", ((p.continuityPct ?? 0) - (u.continuityPct ?? 0)).toFixed(4)],
+      ["runtime_ms", u.runtimeMs.toFixed(0), p.runtimeMs.toFixed(0), (p.runtimeMs - u.runtimeMs).toFixed(0)],
+    ];
+    const csv = rows.map((r) => r.join(",")).join("\n");
+    download(`compare_uniform_vs_progressive_n${opts.maxSeed}.csv`, csv, "text/csv");
+  };
+
+  const openPdfReport = async () => {
+    const autoM = auto ? await buildSizingManifest() : null;
+    const cmpM = compare ? await buildCompareManifest() : null;
+    if (!autoM && !cmpM) return;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    const style = `
+      body{font:12px -apple-system,BlinkMacSystemFont,sans-serif;color:#111;padding:24px;max-width:900px;margin:0 auto}
+      h1{font-size:18px;margin:0 0 4px} h2{font-size:14px;margin:20px 0 6px;border-bottom:1px solid #ccc;padding-bottom:2px}
+      table{border-collapse:collapse;width:100%;font-size:11px;margin:6px 0}
+      th,td{border:1px solid #ccc;padding:4px 6px;text-align:left}
+      th{background:#f2f2f2}
+      .meta{color:#555;font-size:10px}
+      .ok{color:#0a7d3c;font-weight:600} .bad{color:#a11}
+      @media print{.no-print{display:none}}
+      button{padding:6px 12px;margin-right:8px}
+    `;
+    const autoHtml = autoM ? `
+      <h2>Auto-size (uniform) — attempts</h2>
+      <p class="meta">Chosen Ø: <strong>${autoM.chosen_diameter ?? "none passed"} ${unitLen}</strong> ·
+      Constraints: d/D ≤ ${constraints.maxDepthRatio}, V ≤ ${constraints.maxVelocity} ${unitVel},
+      flooded ≤ ${constraints.maxFloodedNodes}</p>
+      <table><thead><tr>
+        <th>Ø (${unitLen})</th><th>Flooded</th><th>Max d/D</th><th>Max V (${unitVel})</th>
+        <th>Continuity %</th><th>Runtime (ms)</th><th>Result</th>
+      </tr></thead><tbody>
+      ${autoM.attempts.map((a) => `<tr>
+        <td>${a.diameter}</td><td>${a.flooded}</td><td>${a.maxDepthRatio.toFixed(2)}</td>
+        <td>${a.maxVelocity.toFixed(2)}</td>
+        <td>${a.continuityPct != null ? a.continuityPct.toFixed(3) : "—"}</td>
+        <td>${a.runtimeMs.toFixed(0)}</td>
+        <td class="${a.passed ? "ok" : "bad"}">${a.passed ? (autoM.chosen_diameter === a.diameter ? "chosen" : "pass") : escapeHtml(a.reason)}</td>
+      </tr>`).join("")}
+      </tbody></table>` : "";
+    const cmpHtml = cmpM ? `
+      <h2>Uniform vs √upstream progressive</h2>
+      <table><thead><tr><th>Metric</th><th>Uniform</th><th>Progressive</th><th>Δ (P − U)</th></tr></thead><tbody>
+        ${cmpRow("Base Ø", cmpM.uniform.diameter, cmpM.progressive.diameter, unitLen)}
+        ${cmpRow("Max d/D", cmpM.uniform.max_depth_ratio.toFixed(2), cmpM.progressive.max_depth_ratio.toFixed(2))}
+        ${cmpRow(`Max V (${unitVel})`, cmpM.uniform.max_velocity.toFixed(2), cmpM.progressive.max_velocity.toFixed(2))}
+        ${cmpRow("Flooded", cmpM.uniform.flooded, cmpM.progressive.flooded)}
+        ${cmpRow("Max surcharge (h)", (cmpM.uniform.max_surcharge_hours ?? 0).toFixed(2), (cmpM.progressive.max_surcharge_hours ?? 0).toFixed(2))}
+        ${cmpRow("Flow continuity %", (cmpM.uniform.flow_continuity_pct ?? 0).toFixed(3), (cmpM.progressive.flow_continuity_pct ?? 0).toFixed(3))}
+        ${cmpRow("Runtime (ms)", cmpM.uniform.runtime_ms.toFixed(0), cmpM.progressive.runtime_ms.toFixed(0))}
+      </tbody></table>` : "";
+    const prov = (autoM?.engine ?? cmpM?.engine)!;
+    win.document.write(`<!doctype html><html><head><title>Collatz SWMM5 Sizing Report</title><style>${style}</style></head><body>
+      <div class="no-print"><button onclick="window.print()">Print / Save as PDF</button></div>
+      <h1>Collatz → SWMM5 Sizing Report</h1>
+      <p class="meta">Generated ${new Date().toLocaleString()} · N=${opts.maxSeed} · units=${opts.flowUnits} · engine=${prov.engineName} ${prov.engineVersion} · wasm sha256 ${prov.assetSha256 ?? "n/a"}</p>
+      ${autoHtml}${cmpHtml}
+    </body></html>`);
+    win.document.close();
+  };
+
+  const canExport = auto || compare;
+
   return (
     <div className="h-full min-h-0 space-y-4 overflow-auto pr-1">
+      {(running || pct > 0) && (
+        <div className="rounded-md border border-border bg-card/60 p-3">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              {running ? `${running} · ${progress}` : "done"}
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] text-primary">{Math.round(pct)}%</span>
+              {running && (
+                <Button size="sm" variant="destructive" onClick={cancel}>Cancel</Button>
+              )}
+            </div>
+          </div>
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded bg-muted">
+            <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+      )}
+
       <div className="rounded-md border border-border bg-card/60 p-4">
         <h3 className="mb-3 font-mono text-xs uppercase tracking-wider text-primary">
           Auto-size (uniform) — pick smallest standard Ø
@@ -100,14 +314,15 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
             />
           </Field>
         </div>
-        <div className="mt-3 flex items-center gap-3">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button onClick={runAuto} disabled={running !== null}>
             {running === "auto" ? "Auto-sizing…" : "Run auto-size"}
           </Button>
-          {running === "auto" && (
-            <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-              {progress}
-            </span>
+          {auto && (
+            <>
+              <Button size="sm" variant="outline" onClick={downloadAutoManifest}>manifest.json</Button>
+              <Button size="sm" variant="outline" onClick={downloadAutoCsv}>attempts.csv</Button>
+            </>
           )}
           {auto && (
             <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -164,14 +379,15 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
           Runs the current settings twice: once with a uniform diameter, once with
           progressive sizing (Ø × √upstream nodes, capped by the max multiplier).
         </p>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <Button onClick={runCompare} disabled={running !== null}>
             {running === "compare" ? "Comparing…" : "Compare modes"}
           </Button>
-          {running === "compare" && (
-            <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-              {progress}
-            </span>
+          {compare && (
+            <>
+              <Button size="sm" variant="outline" onClick={downloadCompareManifest}>manifest.json</Button>
+              <Button size="sm" variant="outline" onClick={downloadCompareCsv}>compare.csv</Button>
+            </>
           )}
         </div>
         {compare && (
@@ -207,9 +423,36 @@ export function SizingPanel({ opts, onApplyDiameter, onResult }: Props) {
         )}
       </div>
 
+      {canExport && (
+        <div className="rounded-md border border-border bg-card/60 p-4">
+          <h3 className="mb-2 font-mono text-xs uppercase tracking-wider text-primary">
+            One-click report
+          </h3>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Opens a printable report (attempt log + compare table) — use your
+            browser's Save-as-PDF from the print dialog.
+          </p>
+          <Button size="sm" onClick={openPdfReport}>Open PDF report</Button>
+        </div>
+      )}
+
       {err && <p className="text-xs text-destructive">{err}</p>}
     </div>
   );
+}
+
+function csvEscape(s: string): string {
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+}
+function cmpRow(label: string, u: string | number, p: string | number, suffix = ""): string {
+  const un = typeof u === "number" ? u : parseFloat(u);
+  const pn = typeof p === "number" ? p : parseFloat(p);
+  const d = pn - un;
+  return `<tr><td>${label}</td><td>${u}${suffix}</td><td>${p}${suffix}</td><td>${d > 0 ? "+" : ""}${d.toFixed(2)}${suffix}</td></tr>`;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
