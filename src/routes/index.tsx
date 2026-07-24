@@ -379,6 +379,12 @@ const PRESETS: Array<{ label: string; title: string; patch: Partial<InpOptions> 
   { label: "Stress",  title: "Stress test — 5000 seeds, may slow rendering",   patch: { maxSeed: 5000 } },
 ];
 
+function shortNumber(decStr: string): string {
+  if (decStr.length <= 12) return Number(decStr).toLocaleString();
+  const head = decStr.slice(0, 4);
+  return `${head[0]}.${head.slice(1)}e+${decStr.length - 1}`;
+}
+
 function Badge({ tone, children }: { tone: "ok" | "warn" | "err"; children: React.ReactNode }) {
   const cls =
     tone === "ok"
