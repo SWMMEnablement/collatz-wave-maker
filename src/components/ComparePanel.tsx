@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   toneForContinuity,
@@ -15,6 +15,8 @@ interface Props {
   onReopen: (id: string) => void;
   hasStoredResult: (id: string) => boolean;
 }
+
+const IMPORTED_KEY = "collatz-swmm.compare.imported.v1";
 
 const SELECTION_KEY = "collatz-swmm.compare.selection.v1";
 
